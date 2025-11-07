@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState,useEffect } from 'react';
 import { NavLink } from "react-router-dom";
-import { MoonStar,SunMedium,LogOut,ChevronDown,User,ChartNoAxesColumn, MapPinHouse } from 'lucide-react';
+import { MoonStar,SunMedium,LogOut,ChevronDown,User,ChartNoAxesColumn, MapPinHouse,Bell } from 'lucide-react';
 import { useTheme } from "../../context/ThemeContext";
 import { useHome } from '../../context/HomeContext';
 import Modal from "./Modal";
@@ -150,7 +150,7 @@ const Navbar = () => {
                   Map
                 </NavLink>
                 
-                <NavLink to="/memories" className={({ isActive }) =>
+                <NavLink to="/profile" className={({ isActive }) =>
                     `p-[5px] h-full flex items-center justify-center rounded-full text-[1.2rem] w-[80px] text-center
                      text-sm font-medium ${isActive ? 
                       "bg-dmain text-white dark:bg-main dark:text-black"
@@ -159,7 +159,7 @@ const Navbar = () => {
                     `
                   }
                 >
-                  Memories
+                  Profile
                 </NavLink>
 
                 <NavLink to="/timeline" className={({ isActive }) =>
@@ -183,6 +183,10 @@ const Navbar = () => {
           </div>
 
          <div className='w-fit h-[50px] flex'>
+        
+        <button className="flex text-borderColor scale-[1.2] dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
+          <Bell/>
+        </button>
          
          <button onClick={handlehomeLocation} className="flex text-borderColor scale-[1.2] dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
            < MapPinHouse/>
@@ -229,45 +233,6 @@ const Navbar = () => {
             {(showProfileOptions)?
               <div className="profileOptions absolute top-[50px] rounded-md right-[0px] h-fit w-fit bg-white/95 dark:bg-dborderColor/95 backdrop-blur-md border-[1px]
            border-borderColor dark:border-dborderColor shadow-lg p-[5px]">
-                  
-                   <button className="text-[0.9rem] h-full flex  justify-start py-[5px] text-lightTxt dark:text-dlightTxt w-full"
-                   onClick={() => setOpenModal(true)}>
-                    <User className='scale-[0.8]' /><p className='pl-[5px] whitespace-nowrap w-[90px] flex justify-start'>Profile</p>
-                  </button>
-
-                      <Modal isOpen={openModal} onClose={() => setOpenModal(false)}>
-                        <div className="w-full max-w-2xl bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl overflow-hidden">
-                        {/* Cover image */}
-                        <div className=" h-20 w-full bg-gradient-to-r from-orange-400 via-pink-400 to-cyan-400 relative">
-                         
-                        </div>
-                      
-                        {/* Profile section */}
-                        <div className="px-6 pb-6">
-                          {/* Profile picture and buttons */}
-                          <div className="flex items-start justify-between -mt-16 mb-4">
-                            { profilePic? 
-                              <img src={profilePic} alt="pfp" referrerPolicy="no-referrer" className="w-32 h-32 z-[10] border-[5px] dark:border-[#1a1a1a] border-main  rounded-full object-cover"/>
-                            :       
-                            <div className="z-[10] absoulte w-32 h-32 rounded-full border-4 border-white dark:border-[#1a1a1a] overflow-hidden bg-gray-300 flex items-center justify-center">
-                              <i className="fa-solid fa-user text-5xl text-gray-500"></i>
-                            </div>
-                            }
-                            
-                            
-                          </div>
-                      
-                          {/* Name and info */}
-                          <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{`${name.length>20?name.slice(0,19)+"...":name}`}</h2>
-                            <p className="text-gray-600 dark:text-gray-400 text-sm mb-1">{`${email.length>40?email.slice(0,49)+"...":email}`}</p>
-                            <p className="text-gray-500 dark:text-gray-500 text-sm">{address}</p>
-                          </div>
-                      
-                                          
-                        </div>
-                      </div>
-                  </Modal>
                   
                    <NavLink to="/analytics" className='text-[0.9rem] h-full flex py-[5px] w-full border-t-[1px] border-borderColor dark:border-dborderColor text-lightTxt dark:text-dlightTxt'>
                       <ChartNoAxesColumn className='scale-[0.8]' /><p className='pl-[5px] whitespace-nowrap w-[90px] flex justify-start'>Analytics</p>

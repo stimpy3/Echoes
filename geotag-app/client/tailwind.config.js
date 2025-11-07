@@ -22,6 +22,8 @@ export default {
         dfadeColor: '#171717ff',
         txt: 'black',
         dtxt: 'white',
+        txt2:'#b1b1b1ff',
+        dtxt2: '#a0a0a0ff',
         lightTxt: '#252525ff',
         dlightTxt: '#d0d0d0ff',
         accentMain: '#2daadd',
@@ -75,7 +77,8 @@ export default {
         }
       },
       backgroundImage: {
-        'gradient-main': 'linear-gradient(90deg, #fc9b41ff, #d557e3ff, #3ed8e3ff)'
+        'gradient-main': 'linear-gradient(90deg, #fc9b41ff, #d557e3ff, #3ed8e3ff)',
+        'dgradient-main': 'linear-gradient(90deg, #5b3f26ff, #492a4dff, #1f4043ff)'
       },
       borderRadius: {
         lg: 'var(--radius)',
