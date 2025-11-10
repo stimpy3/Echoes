@@ -67,13 +67,13 @@ const MemoryCard = ({ memory, onDelete, onEdit }) => {
   return (
     <>
       {/* --- CARD --- */}
-      <div className="relative bg-lightMain dark:bg-dlightMain shadow-md overflow-hidden transition duration-300">
+      <div className="relative h-[250px] bg-lightMain dark:bg-dlightMain shadow-md overflow-hidden transition duration-300">
         {/* --- Image --- */}
         <img
           src={memory.photoUrl}
           alt={memory.title}
           onClick={() => !showDetails && setShowImageModal(true)} // 🆕 open modal only when details hidden
-          className={`w-full h-64 object-cover cursor-pointer transition-all duration-500 ${
+          className={`w-full h-full object-cover cursor-pointer transition-all duration-500 ${
             showDetails ? 'opacity-40 blur-sm' : 'opacity-100 blur-0'
           }`}
         />

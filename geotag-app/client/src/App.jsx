@@ -5,6 +5,7 @@ import MemoriesPage from './pages/MemoriesPage';
 import TimelinePage from './pages/TimelinePage';
 import AnalyticsPage from './pages/AnalyticsPage'
 import AuthPage from './pages/auth/AuthPage';
+import ProfilePage from "./pages/ProfilePage";
 import { ThemeProvider } from "./context/ThemeContext";
 import { HomeProvider } from "./context/HomeContext";
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="/home" element={<HomePage />} />
           <Route path="/homelocation" element={<HomeLocationPage />} />
           <Route path="/profile" element={<MemoriesPage />} />
+          <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/" element={<AuthPage />} />
