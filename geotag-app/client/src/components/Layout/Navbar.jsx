@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState,useEffect } from 'react';
+import { useState,useEffect,useRef } from 'react';
 import { NavLink } from "react-router-dom";
 import { MoonStar,SunMedium,LogOut,ChevronDown,User,ChartNoAxesColumn, MapPinHouse,Bell } from 'lucide-react';
 import { useTheme } from "../../context/ThemeContext";
@@ -19,9 +19,56 @@ const Navbar = () => {
    const [email,setEmail]=useState("");
    const [address,setAddress]=useState("");
    const [profilePic,setProfilePic]=useState("");
-  const [addrLoading, setAddrLoading] = useState(false);
+   const [addrLoading, setAddrLoading] = useState(false);
+   const [notifications, setNotifications] = useState([]);
+   const notifCount = notifications.length;
 
-    const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
+   const [openNotif, setOpenNotif] = useState(false);
+   const notifRef = useRef(null);
+
+  const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+
+  const minutes = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (hours < 24) return `${hours} hr${hours > 1 ? "s" : ""} ago`;
+  if (days < 30) return `${days} day${days > 1 ? "s" : ""} ago`;
+  if (months < 12) return `${months} month${months > 1 ? "s" : ""} ago`;
+  return `${years} year${years > 1 ? "s" : ""} ago`;
+};
+
+const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
+
+const handleFollowConfirm = async (senderId, notifId) => {
+  await axios.post(`${BASE_URL}/api/follow/confirm`, { senderId },{ withCredentials: true });
+  setNotifications(prev => prev.filter(n => n._id !== notifId));  //remove from UI
+};
+
+const handleDeleteNotif = async (notifId) => {
+  await axios.delete(`${BASE_URL}/api/follow/notifications/${notifId}`,{ withCredentials: true });
+  setNotifications(prev => prev.filter(n => n._id !== notifId));
+};
+ 
+
+  useEffect(() => {
+  const handleClickOutside = (e) => {
+    if (notifRef.current && !notifRef.current.contains(e.target)) {
+      setOpenNotif(false);
+    }
+    };
+
+   document.addEventListener("mousedown", handleClickOutside);
+   return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
    //run when component mounts
    useEffect(()=>{
     const fetchUser = async () => {
@@ -125,6 +172,24 @@ const Navbar = () => {
     navigate('/homelocation');
    };
 
+
+   useEffect(() => {
+  const fetchNotifications = async () => {
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/api/follow/notifications`,
+        { withCredentials: true }
+      );
+      setNotifications(res.data);
+      console.log("Fetched notifications:", res.data);
+    } catch (err) {
+      console.log("Notif fetch error:", err);
+    }
+  };
+
+  fetchNotifications();
+}, []);
+
  
 
 
@@ -183,20 +248,97 @@ const Navbar = () => {
           </div>
 
          <div className='w-fit h-[50px] flex'>
-        
-        <button className="flex text-borderColor scale-[1.2] dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
-          <Bell/>
-        </button>
+
+          <div className="relative mr-5" ref={notifRef}>
+           {/* Bell Button */}
+           <button
+             onClick={() => setOpenNotif(prev => !prev)}
+             className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full relative"
+           >
+             <Bell className="scale-[0.9]" />
          
-         <button onClick={handlehomeLocation} className="flex text-borderColor scale-[1.2] dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
+             {/*Notification Badge */}
+             {notifCount > 0 && (
+               <span className="absolute top-[5px] -right-1 bg-red-500 text-white text-[0.65rem] font-semibold px-[6px] py-[1px] rounded-full">
+                 {notifCount}
+               </span>
+             )}
+           </button>
+         
+           {/* Dropdown */}
+           {openNotif && (
+             <div className="absolute right-0 top-[48px] w-[320px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md p-1 backdrop-blur-md">
+         
+               {notifications.length === 0 ? (
+                  <p className="text-sm text-txt dark:text-dtxt">No notifications yet</p>
+                ) : (
+                  notifications.map((req, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-2 py-1 border-b border-gray-300 last:border-none"
+                    >
+                
+                      {/* Avatar */}
+                      {req.sender.profilePic ? (
+                        <img
+                          src={req.sender.profilePic}
+                          alt="pfp"
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="aspect-square w-8 h-8 border-[1px] bg-gray-400 dark:bg-[#393939] rounded-full flex justify-center items-center overflow-hidden">
+                          <i className="fa-solid fa-user text-[1rem] text-gray-200 dark:text-gray-400"></i>
+                        </div>
+                      )}
+                
+                      {/* Content */}
+                      <div className="flex-1">
+                        <p className="text-[0.8rem] text-txt dark:text-dtxt font-medium">
+                          {req.sender.name} sent you a follow request
+                        </p>
+                        <p className="text-[0.6rem] text-gray-400">
+                           {formatDate(req.createdAt)}
+                        </p>
+                      </div>
+                
+                      {/* Buttons */}
+                      <div className="flex items-center gap-2">
+                        {/* ACCEPT */}
+                        <button
+                          onClick={() => handleFollowConfirm(req.sender._id, req._id)}
+                          className="px-2 py-1 text-xs bg-gradient-main text-white rounded-md"
+                        >
+                          Accept
+                        </button>
+                
+                        {/* DELETE */}
+                        <button
+                          onClick={() => handleDeleteNotif(req._id)}
+                          className="px-2 py-1 text-xs bg-dlightMain text-white rounded-md"
+                        >
+                          X
+                        </button>
+                      </div>
+                
+                    </div>
+                  ))
+                )}
+
+             </div>
+           )}
+         </div>
+
+
+         
+         <button onClick={handlehomeLocation} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
            < MapPinHouse/>
          </button>
          
          <button onClick={() => setDark(prev => !prev)} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
            {dark ? (
-             <SunMedium className="scale-[1.2] transition-all duration-300" />
+             <SunMedium className="scale-[1.1] transition-all duration-300" />
            ) : (
-             <MoonStar className="scale-[1.2] transition-all duration-300" />
+             <MoonStar className="scale-[1.1] transition-all duration-300" />
            )}
          </button>
 

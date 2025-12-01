@@ -25,7 +25,9 @@ body {
 p{
   caret-color: transparent;
 }
-
+input,textarea{
+  caret-color: auto;
+}
 *:focus {
   outline: none;
   box-shadow: none;

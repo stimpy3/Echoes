@@ -31,6 +31,7 @@ router.post('/creatememory',verifyToken,async(req,res)=>{
     }
 });
 
+//this one is to get memories of logged-in user for MemoriesPage
 router.get('/fetchmemory',verifyToken,async(req,res)=>{
     try{
         const memories= await Memory.find({userId:req.userId}).sort({createdAt:-1});
@@ -40,6 +41,18 @@ router.get('/fetchmemory',verifyToken,async(req,res)=>{
        res.status(500).json({message:'server failed to fetch memories' });
     }
 });
+
+//this one is to get memories of a specific user for ProfilePage
+router.get('/user/:id', async (req, res) => {
+  try {
+    const memories = await Memory.find({ userId: req.params.id }).sort({ createdAt: -1 });
+    res.status(200).json({ memories });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching user memories' });
+  }
+});
+
 
 
 router.patch('/editmemory/:id',verifyToken,async(req,res)=>{

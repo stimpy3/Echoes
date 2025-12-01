@@ -9,7 +9,7 @@ import gsap from "gsap";
 
 const MapView = ({ memories, addingMode = false, onMapClick }) => {
   const defaultCenter = [19.0866, 72.9095];
-  const defaultZoom = 11;
+  const defaultZoom = 5;
   const { dark } = useTheme();
   const { homePosition } = useHome(); //get home position from context
 

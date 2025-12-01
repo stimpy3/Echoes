@@ -1,296 +1,346 @@
-import { useState,useEffect } from 'react';
-import MemoryCard from '../components/Memories/MemoryCard';
-import AddMemoryForm from '../components/Memories/AddMemoryForm';
+// --- full rewritten MemoriesPage.jsx ---
 
-import Navbar from '../components/Layout/Navbar';
-import SplitText from "../components/Layout/SplitText";
+import { useState, useEffect } from "react";
+import MemoryCard from "../components/Memories/MemoryCard";
+import AddMemoryForm from "../components/Memories/AddMemoryForm";
+import Navbar from "../components/Layout/Navbar";
 import { useTheme } from "../context/ThemeContext";
 import animationData from "../data/animationData/emptyAnimation.json";
 import Lottie from "lottie-react";
 import axios from "axios";
-import { ChevronLeft,ChevronRight,UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const MemoriesPage = () => {
-
   const navigate = useNavigate();
+  const goToProfile = (userId) => navigate(`/profile/${userId}`);
 
-  const goToProfile = (userId) => {
-    navigate(`/profile/${userId}`);
-  };
+  const { dark } = useTheme();
 
-  const { dark, setDark } = useTheme();
   const [memories, setMemories] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
-     const [name,setName]=useState("");
-   const [email,setEmail]=useState("");
-   const [address,setAddress]=useState("");
-   const [profilePic,setProfilePic]=useState("");
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [profilePic, setProfilePic] = useState("");
   const [addrLoading, setAddrLoading] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   const [suggestions, setSuggestions] = useState([]);
-  const [requestedList, setRequestedList] = useState([]);
 
-    const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
-   //run when component mounts
-   useEffect(()=>{
+  const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
+
+  // Fetch user for navbar
+  useEffect(() => {
     const fetchUser = async () => {
-    
-      try{
-        const res=await axios.get(`${BASE_URL}/api/user/navbar`,{ withCredentials: true });
+      try {
+        const res = await axios.get(`${BASE_URL}/api/user/navbar`, {
+          withCredentials: true,
+        });
+        setId(res.data._id);
         setName(res.data.name);
         setEmail(res.data.email);
         setProfilePic(res.data.profilePic);
-      }
-      catch(err){
+      } catch (err) {
         console.error("Error fetching user data:", err.response?.data || err.message);
-        setName("");
-        setEmail("");
-        setProfilePic("");
       }
     };
-    
-    fetchUser();     
-   },[]);
-   
 
-   
+    fetchUser();
+  }, []);
 
-  
- 
-
-  const handleDeleteMemory = async (id) => {
-    if (window.confirm('Are you sure you want to delete this memory?')) {
-      setMemories(memories.filter((m) => m._id !== id));
-      try {
-       await axios.delete(`${BASE_URL}/api/memory/deletememory/${id}`,{withCredentials:true});
-      }
-      catch(err){
-        console.error("Failed to delete memory:",err);
-      }
-    }
-  };
-
-
-  const handleEditMemory = async (updatedMemory) => { 
-  try {
-    //PATCH request to backend
-    const res = await axios.patch(
-      `${BASE_URL}/api/memory/editmemory/${updatedMemory._id}`,
-      { title: updatedMemory.title, description: updatedMemory.description },
-      { withCredentials: true }
-    );
-
-  
-    setMemories(memories.map((m) =>
-      m._id === updatedMemory._id ? res.data.memory : m
-    ));
-  } catch (err) {
-    console.error("Failed to edit memory:", err);
-  }
-};
-  
-
-   useEffect(()=>{
-   const fetchMemories=async()=>{
-    try{
-        const res= await axios.get(`${BASE_URL}/api/memory/fetchmemory`, {withCredentials: true });// credentials:true is crucial for sending cookies
-        setMemories([...memories, ...(res.data.memories || [])]);
-    }
-    catch(err){
-      console.error("Failed to fetch memories:",err);
-    }
-   }
-   fetchMemories();
-  },[]);
-
-
+  // Fetch memories
   useEffect(() => {
-  const container = document.getElementById("suggestionContainer");
-  const leftBtn = document.getElementById("scrollLeft");
-  const rightBtn = document.getElementById("scrollRight");
+    const fetchMemories = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/api/memory/fetchmemory`, {
+          withCredentials: true,
+        });
 
-  const updateButtonVisibility = () => {
-    if (!container) return;
-    const isOverflowing = container.scrollWidth > container.clientWidth;
-    const canScrollLeft = container.scrollLeft > 0;
-    const canScrollRight =
-      container.scrollLeft < container.scrollWidth - container.clientWidth - 5;
+        setMemories(res.data.memories || []);
+      } catch (err) {
+        console.error("Failed to fetch memories:", err);
+      }
+    };
 
-    leftBtn.style.opacity = isOverflowing && canScrollLeft ? "1" : "0";
-    leftBtn.style.pointerEvents = isOverflowing && canScrollLeft ? "auto" : "none";
-    rightBtn.style.opacity = isOverflowing && canScrollRight ? "1" : "0";
-    rightBtn.style.pointerEvents = isOverflowing && canScrollRight ? "auto" : "none";
+    fetchMemories();
+  }, []);
+
+  // Delete a memory
+  const handleDeleteMemory = async (id) => {
+    if (!window.confirm("Delete this memory?")) return;
+
+    setMemories((prev) => prev.filter((m) => m._id !== id));
+
+    try {
+      await axios.delete(`${BASE_URL}/api/memory/deletememory/${id}`, {
+        withCredentials: true,
+      });
+    } catch (err) {
+      console.error("Delete memory failed:", err);
+    }
   };
 
-  // Attach listeners
-  container.addEventListener("scroll", updateButtonVisibility);
-  window.addEventListener("resize", updateButtonVisibility);
+  // Edit memory
+  const handleEditMemory = async (updatedMemory) => {
+    try {
+      const res = await axios.patch(
+        `${BASE_URL}/api/memory/editmemory/${updatedMemory._id}`,
+        {
+          title: updatedMemory.title,
+          description: updatedMemory.description,
+        },
+        { withCredentials: true }
+      );
 
-  updateButtonVisibility(); // initial check
-
-  return () => {
-    container.removeEventListener("scroll", updateButtonVisibility);
-    window.removeEventListener("resize", updateButtonVisibility);
+      setMemories((prev) =>
+        prev.map((m) => (m._id === updatedMemory._id ? res.data.memory : m))
+      );
+    } catch (err) {
+      console.error("Failed to edit memory:", err);
+    }
   };
-}, []);
 
-
-  
-//-----------------------------------------seeagain
- useEffect(() => {
+  // Fetch suggestions — now includes isRequested
+  useEffect(() => {
     const fetchSuggestions = async () => {
       try {
         const res = await axios.get(`${BASE_URL}/api/users/suggestions`, {
-        withCredentials: true, // important! so cookies (token) are sent
+          withCredentials: true,
         });
-        setSuggestions(res.data);
-        setRequestedList(new Array(res.data.length).fill(false));
+
+        setSuggestions(res.data); // each object includes isRequested
       } catch (err) {
-        console.error(err);
+        console.error("Suggestions error:", err);
       }
     };
 
     fetchSuggestions();
   }, []);
 
+  // Handle follow request
+  //Backend receives sender (from JWT token) + receiver (from button click).
+  //Backend either creates a follow request or deletes it if it exists.
+  //Backend responds { requested: true/false }
+  //You update your local state (requestedList[index]) based on backend response.
+  const handleRequest = async (i, receiverId) => {
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/api/follow/request`,
+        { receiverId },
+        { withCredentials: true }
+      );
 
-  const handleRequest = (index) => {
-  const updated = [...requestedList];
-  updated[index] = !updated[index];
-  setRequestedList(updated);
-};
-//----------------------------------------
+      // Update only the clicked suggestion
+      setSuggestions((prev) => {
+        const updated = [...prev];
+        updated[i] = {
+          ...updated[i],
+          isRequested: res.data.requested,
+        };
+        return updated;
+      });
+    } catch (err) {
+      console.error("Follow request error:", err);
+    }
+  };
+
+  // Scroll arrow logic
+  useEffect(() => {
+    const container = document.getElementById("suggestionContainer");
+    const leftBtn = document.getElementById("scrollLeft");
+    const rightBtn = document.getElementById("scrollRight");
+
+    const updateButtons = () => {
+      if (!container) return;
+
+      const isOverflowing =
+        container.scrollWidth > container.clientWidth;
+
+      leftBtn.style.opacity = container.scrollLeft > 0 ? "1" : "0";
+      rightBtn.style.opacity =
+        container.scrollLeft <
+        container.scrollWidth - container.clientWidth - 5
+          ? "1"
+          : "0";
+
+      leftBtn.style.pointerEvents =
+        leftBtn.style.opacity === "1" ? "auto" : "none";
+      rightBtn.style.pointerEvents =
+        rightBtn.style.opacity === "1" ? "auto" : "none";
+    };
+
+    container?.addEventListener("scroll", updateButtons);
+    window.addEventListener("resize", updateButtons);
+    updateButtons();
+
+    return () => {
+      container?.removeEventListener("scroll", updateButtons);
+      window.removeEventListener("resize", updateButtons);
+    };
+  }, []);
+
+  useEffect(() => {
+  const fetchFollowCounts = async () => {
+    try {
+      const res = await axios.get( `${BASE_URL}/api/users/${id}/follow-counts`, {
+        withCredentials: true,
+      });
+      setFollowersCount(res.data.followerCount);  // match backend keys
+      setFollowingCount(res.data.followingCount);
+      console.log("Follow counts fetched:", res.data);
+    } catch (err) {
+      console.error("Error fetching follow counts:", err);
+    }
+  };
+
+  fetchFollowCounts();
+}, [id]);
+
+
 
   return (
-    <div className="bg-main dark:bg-dmain w-full min-h-screen h-fit flex flex-col px-[30px] pb-[10px]">
+    <div className="bg-main dark:bg-dmain w-full min-h-screen flex flex-col px-[30px] pb-[10px]">
+
       <Navbar />
-      <div className="mt-[70px] flex flex-col justify-center items-center bg-main dark:bg-dmain  pb-[5px]">
-        <div className="w-full overflow-hidden pb-[50px]">
-                        {/* Cover image */}
-                       
-                      
-                        {/* Profile section */}
-                        <div className="h-[200px] flex items-center border-b-[1px] border-borderColor dark:border-dborderColor">
-                          {/* Profile picture and buttons */}
-                          <div className="min-w-36 flex items-center justify-between">
-                            { profilePic? 
-                              <img src={profilePic} alt="pfp" referrerPolicy="no-referrer" className="w-36 h-36 z-[10] border-[5px] border-main dark:border-dmain  rounded-full object-cover"/>
-                            :       
-                            <div className="z-[10] absoulte w-36 h-36 rounded-full border-4 border-main dark:border-dmain overflow-hidden bg-gray-300 flex items-center justify-center">
-                              <i className="fa-solid fa-user text-5xl text-gray-500"></i>
-                            </div>
-                            }
-                            
-                            
-                          </div>
-                      
-                          {/* Name and info */}
-                          <div className="px-[30px] w-full flex flex-col">
-                            <div className="w-full pb-[30px]">
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{`${name.length>20?name.slice(0,19)+"...":name}`}</h2>
-                            <p className="text-txt2 dark:text-dtxt2 text-sm mb-1">{`${email.length>40?email.slice(0,49)+"...":email}`}</p>
-                            <p className="text-gray-500 dark:text-gray-500 text-sm">{address}</p>
-                            </div>
-                            <div className="w-full flex justify-around text-[1.5rem]" >
-                              <p>{memories.length}&nbsp;<span className='text-txt2 dark:text-dtxt2'>echoes</span></p>
-                              <p>{0}&nbsp;<span className='text-txt2 dark:text-dtxt2'>followers</span></p>
-                              <p>{0}&nbsp;<span className='text-txt2 dark:text-dtxt2'>following</span></p>
-                            </div>
-                          </div>
-                      
-                                          
-                        </div>
-                      </div>
-        {/* Header */}
-        
 
-        {/* Memories Grid */}
-        {memories.length === 0 ? (
-          <div className="pb-[10px] flex flex-col items-center justify-center text-center w-full min-h-[80vh]  rounded-lg">
-            <Lottie animationData={animationData} loop={true} className="h-[250px] aspect-square overflow-hidden"/>
-            <p className="text-txt dark:text-dtxt text-lg mb-4">No memories yet</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[5px] min-h-[80vh]">
-            {memories.map((memory) => (
-              <MemoryCard
-                key={memory.id}
-                memory={memory}
-                onDelete={handleDeleteMemory}
-                onEdit={handleEditMemory}
-              />
-            ))}
-          </div>
-        )}
+      {/* Profile Header */}
+      <div className="mt-[70px] flex flex-col items-center">
+        <div className="w-full pb-[50px]">
+          <div className="h-[200px] flex items-center border-b border-borderColor dark:border-dborderColor">
 
-  <section className="w-full h-fit mt-[50px] flex flex-col relative">
-  <p className="text-[1.5rem] pt-[20px] h-fit flex items-center border-t-[1px] border-borderColor dark:border-dborderColor">Suggested for you</p>
-
-  {/* Scroll container */}
-    <div
-      data-label="suggestionContainer"
-      className="w-full h-fit overflow-y-hidden flex overflow-x-auto scroll-smooth relative scrollbar-hide"
-      id="suggestionContainer"
-    >
-      {suggestions.map((user, i) => (
-        <div key={user._id} data-label="suggestion" className="h-[250px] py-[20px] mr-[30px] shadow-lg"
-         onClick={() => goToProfile(user._id)}>
-          <div className="h-full bg-lightMain dark:bg-dslightLightMain rounded-[10px] w-[150px] overflow-hidden">
-            <div className="w-full p-[10px] h-[75%] flex flex-col items-center justify-center">
-              <div className="w-[90px] h-[90px] rounded-full bg-lightMain2 dark:bg-dlightMain flex items-end justify-center overflow-hidden">
-                {user.profilePic ? (
-                  <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
-                ) : (
-                  <i className="fa-solid fa-user text-7xl text-main dark:text-dborderColor"></i>
-                )}
-              </div>
-              <div className="py-[5px] text-lightTxt dark:text-dlightTxt">{user.name}</div>
+            {/* Profile Pic */}
+            <div className="min-w-36 flex items-center justify-between">
+              {profilePic ? (
+                <img
+                  src={profilePic}
+                  className="w-36 h-36 rounded-full border-4 border-main dark:border-dmain object-cover"
+                />
+              ) : (
+                <div className="w-36 h-36 rounded-full bg-gray-300 flex items-end justify-center overflow-hidden">
+                  <i className="fa-solid fa-user text-[7rem] text-gray-500"></i>
+                </div>
+              )}
             </div>
-            <div className="w-full h-[25%] p-[10px] flex items-center justify-center">
-              <button
-                onClick={() => handleRequest(i)}
-                className={`rounded-[5px] w-full p-[5px] flex justify-center text-white transition-colors duration-300 ${
-                  requestedList[i] ? "bg-dgradient-main" : "bg-gradient-main"
-                }`}
-              >
-                {requestedList[i] ? "Requested" : (
-                  <div className="h-fit w-fit flex justify-center"><UserPlus />&nbsp;Follow</div>
-                )}
-              </button>
+
+            {/* User info */}
+            <div className="px-[30px] w-full">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {name}
+              </h2>
+              <p className="text-sm text-txt2 dark:text-dtxt2">{email}</p>
+
+              <div className="flex justify-around mt-[20px] text-[1.3rem]">
+                <p>{memories.length} <span className="text-txt2 dark:text-dtxt2">echoes</span></p>
+                <p>{followersCount} <span className="text-txt2 dark:text-dtxt2">followers</span></p>
+                <p>{followingCount} <span className="text-txt2 dark:text-dtxt2">following</span></p>
+              </div>
             </div>
           </div>
         </div>
-      ))}
-    </div>
-
-  {/* Left Button */}
-  <button
-    id="scrollLeft"
-    onClick={() => {
-      const container = document.getElementById("suggestionContainer");
-      container.scrollBy({ left: -300, behavior: "smooth" });
-    }}
-    className="absolute left-0 top-1/2 -translate-y-1/2 dark:bg-main dark:text-dslightLightMain bg-dlightMain2 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:scale-105 transition-transform opacity-0 pointer-events-none"
-  >
-    <ChevronLeft/>
-  </button>
-
-  {/* Right Button */}
-  <button
-    id="scrollRight"
-    onClick={() => {
-      const container = document.getElementById("suggestionContainer");
-      container.scrollBy({ left: 300, behavior: "smooth" });
-    }}
-    className="absolute right-0 top-1/2 -translate-y-1/2 dark:bg-main dark:text-dslightLightMain bg-dlightMain2 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:scale-105 transition-transform opacity-0 pointer-events-none"
-  >
-    <ChevronRight/>
-  </button>
-</section>
-
-
       </div>
+
+      {/* Memory Grid */}
+      {memories.length === 0 ? (
+        <div className="flex flex-col items-center text-center min-h-[80vh]">
+          <Lottie animationData={animationData} className="h-[250px]" />
+          <p className="text-txt dark:text-dtxt text-lg">No memories yet</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[5px]">
+          {memories.map((memory) => (
+            <MemoryCard
+              key={memory._id}
+              memory={memory}
+              onDelete={handleDeleteMemory}
+              onEdit={handleEditMemory}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Suggestions Section */}
+      <section className="w-full mt-[50px] relative">
+        <p className="text-[1.5rem] pt-[20px] border-t border-borderColor dark:border-dborderColor">
+          Suggested for you
+        </p>
+
+        <div
+          id="suggestionContainer"
+          className="w-full flex overflow-x-auto scrollbar-hide scroll-smooth h-fit"
+        >
+          {suggestions.map((user, i) => (
+            <div
+              key={user._id}
+              className="h-[250px] py-[20px] mr-[30px] shadow-lg"
+              onClick={() => goToProfile(user._id)}
+            >
+              <div className="h-full w-[150px] bg-lightMain dark:bg-dslightLightMain rounded-[10px] border overflow-hidden">
+
+                {/* Avatar */}
+                <div className="p-[10px] h-[75%] flex flex-col items-center justify-center">
+                  <div className="flex items-end justify-center overflow-hidden w-[90px] h-[90px] rounded-full bg-gray-400 dark:bg-[#393939]">
+                    {user.profilePic ? (
+                      <img src={user.profilePic} className="w-full h-full object-cover" />
+                    ) : (
+                      <i className="fa-solid fa-user text-[4rem] text-gray-200 dark:text-gray-400 "></i>
+                    )}
+                  </div>
+                  <div className="py-[5px] text-lightTxt dark:text-dlightTxt">{user.name}</div>
+                </div>
+
+                {/* Follow button */}
+                <div className="p-[10px] flex items-center justify-center h-[25%]">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRequest(i, user._id);
+                    }}
+                    className={`w-full p-[6px] rounded-[5px] text-white transition ${
+                      user.isRequested ? "bg-dgradient-main" : "bg-gradient-main"
+                    }`}
+                  >
+                    {user.isRequested ? "Requested" : (
+                      <div className="flex justify-center items-center">
+                        <UserPlus /> &nbsp; Follow
+                      </div>
+                    )}
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Left Arrow */}
+        <button
+          id="scrollLeft"
+          onClick={() =>
+            document
+              .getElementById("suggestionContainer")
+              .scrollBy({ left: -300, behavior: "smooth" })
+          }
+          className="absolute left-0 top-1/2 -translate-y-1/2 bg-dlightMain2 dark:bg-main text-white w-10 h-10 rounded-full opacity-0 pointer-events-none flex items-center justify-center"
+        >
+          <ChevronLeft />
+        </button>
+
+        {/* Right Arrow */}
+        <button
+          id="scrollRight"
+          onClick={() =>
+            document
+              .getElementById("suggestionContainer")
+              .scrollBy({ left: 300, behavior: "smooth" })
+          }
+          className="absolute right-0 top-1/2 -translate-y-1/2 bg-dlightMain2 dark:bg-main text-white w-10 h-10 rounded-full opacity-0 pointer-events-none flex items-center justify-center"
+        >
+          <ChevronRight />
+        </button>
+      </section>
     </div>
   );
 };
