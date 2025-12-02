@@ -48,6 +48,33 @@ router.get("/suggestions", verifyToken, async (req, res) => {
 });
 
 
+// GET /api/users/followers → all users following the logged-in user
+router.get("/followers", verifyToken, async (req, res) => {
+  try {
+    const currentUserId = req.userId;
+    const followersDocs = await Follower.find({ following: currentUserId }).populate("follower", "name email profilePic");
+    const followers = followersDocs.map(doc => doc.follower);
+    res.json(followers);
+  } catch (err) {
+    console.error("Error fetching followers:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// GET /api/users/following → all users the logged-in user is following
+router.get("/following", verifyToken, async (req, res) => {
+  try {
+    const currentUserId = req.userId;
+    const followingDocs = await Follower.find({ follower: currentUserId }).populate("following", "name email profilePic");
+    const following = followingDocs.map(doc => doc.following);
+    res.json(following);
+  } catch (err) {
+    console.error("Error fetching following:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
 //If you put /:id first, Express will match it BEFORE /follow-counts.
 //  router.get /users/:id
 //   router.get  /users/:id/follow-counts this will never be reached
@@ -62,6 +89,34 @@ router.get("/:userId/follow-counts", verifyToken, async (req, res) => {
 
   } catch (err) {
     console.error("Error fetching follow counts:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/status/:userId", verifyToken, async (req, res) => {
+  try {
+    const currentUserId = req.userId;
+    const profileUserId = req.params.userId;
+
+    // Check if already following
+    const isFollowing = await Follower.findOne({
+      follower: currentUserId,
+      following: profileUserId
+    });
+
+    // Check if request pending
+    const isRequested = await FollowRequest.findOne({
+      sender: currentUserId,
+      receiver: profileUserId
+    });
+
+    return res.json({
+      following: !!isFollowing,
+      requested: !!isRequested
+    });
+
+  } catch (err) {
+    console.error("Follow status check error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });

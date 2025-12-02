@@ -115,4 +115,33 @@ router.post("/confirm", verifyToken, async (req, res) => {
 
 
 
+//unfollow
+router.post("/unfollow", verifyToken, async (req, res) => {
+  try {
+    const currentUserId = req.userId; // from verifyToken
+    const { receiverId } = req.body; // user to unfollow
+
+    if (!receiverId) {
+      return res.status(400).json({ message: "Receiver ID is required" });
+    }
+
+    // Remove the follower entry
+    const deleted = await Follower.findOneAndDelete({
+      follower: currentUserId,
+      following: receiverId,
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Follow relationship not found" });
+    }
+
+    return res.json({ message: "Unfollowed successfully" });
+  } catch (err) {
+    console.error("Unfollow error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
 module.exports = router;

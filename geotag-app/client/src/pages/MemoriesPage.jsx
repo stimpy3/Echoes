@@ -7,6 +7,8 @@ import Navbar from "../components/Layout/Navbar";
 import { useTheme } from "../context/ThemeContext";
 import animationData from "../data/animationData/emptyAnimation.json";
 import Lottie from "lottie-react";
+
+
 import axios from "axios";
 import { ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -32,9 +34,10 @@ const MemoriesPage = () => {
 
   const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
 
-  // Fetch user for navbar
+  // Fetch user 
   useEffect(() => {
     const fetchUser = async () => {
+
       try {
         const res = await axios.get(`${BASE_URL}/api/user/navbar`, {
           withCredentials: true,
@@ -182,8 +185,11 @@ const MemoriesPage = () => {
     };
   }, []);
 
+
+  //fetch folllow counts
   useEffect(() => {
   const fetchFollowCounts = async () => {
+    if (!id) return; // Guard clause - don't run if id is not set yet
     try {
       const res = await axios.get( `${BASE_URL}/api/users/${id}/follow-counts`, {
         withCredentials: true,
@@ -234,8 +240,18 @@ const MemoriesPage = () => {
 
               <div className="flex justify-around mt-[20px] text-[1.3rem]">
                 <p>{memories.length} <span className="text-txt2 dark:text-dtxt2">echoes</span></p>
-                <p>{followersCount} <span className="text-txt2 dark:text-dtxt2">followers</span></p>
-                <p>{followingCount} <span className="text-txt2 dark:text-dtxt2">following</span></p>
+                <p
+                   className="cursor-pointer"
+                   onClick={() => navigate(`/followers`)}
+                 >
+                   {followersCount} <span className="text-txt2 dark:text-dtxt2">followers</span>
+                 </p>
+                 <p
+                   className="cursor-pointer"
+                   onClick={() => navigate(`/following`)}
+                 >
+                   {followingCount} <span className="text-txt2 dark:text-dtxt2">following</span>
+                 </p>
               </div>
             </div>
           </div>
@@ -244,8 +260,8 @@ const MemoriesPage = () => {
 
       {/* Memory Grid */}
       {memories.length === 0 ? (
-        <div className="flex flex-col items-center text-center min-h-[80vh]">
-          <Lottie animationData={animationData} className="h-[250px]" />
+        <div className="flex flex-col items-center text-center min-h-[80vh] bg-main dark:bg-dmain">
+          <Lottie animationData={animationData} className="h-[250px] bg-main dark:bg-dmain" />
           <p className="text-txt dark:text-dtxt text-lg">No memories yet</p>
         </div>
       ) : (

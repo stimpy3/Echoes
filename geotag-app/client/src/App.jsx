@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import HomeLocationPage from './pages/HomeLocationPage'
 import MemoriesPage from './pages/MemoriesPage';
+import FollowerListPage from './pages/FollowerListPage';
+import FollowingListPage from './pages/FollowingListPage';
 import TimelinePage from './pages/TimelinePage';
 import AnalyticsPage from './pages/AnalyticsPage'
 import AuthPage from './pages/auth/AuthPage';
@@ -19,6 +21,8 @@ function App() {
           <Route path="/home" element={<HomePage />} />
           <Route path="/homelocation" element={<HomeLocationPage />} />
           <Route path="/profile" element={<MemoriesPage />} />
+          <Route path="/followers" element={<FollowerListPage />} />
+          <Route path="/following" element={<FollowingListPage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />

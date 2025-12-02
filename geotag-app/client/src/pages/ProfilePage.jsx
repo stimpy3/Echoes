@@ -5,6 +5,7 @@ import axios from "axios";
 import MapView from "../components/Map/MapView";
 import Navbar from "../components/Layout/Navbar";
 import MemoryCard from "../components/Memories/MemoryCard";
+import BareHomePage from './BarebonesPages/BareProfilePage';
 import Lottie from "lottie-react";
 import animationData from "../data/animationData/emptyAnimation.json";
 
@@ -20,8 +21,81 @@ const ProfilePage = () => {
   const [loading, setLoading] = useState(true);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [followState, setFollowState] = useState("none");
+// "none" | "requested" | "following"
+
 
   // --- HOOKS ---
+
+
+  //follow user
+// --- inside ProfilePage component ---
+
+const [showUnfollowModal, setShowUnfollowModal] = useState(false);
+
+// Handle Follow button click
+const handleFollow = async () => {
+  if (followState === "following") {
+    // Open modal instead of directly unfollowing
+    setShowUnfollowModal(true);
+    return;
+  }
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/api/follow/request`,
+      { receiverId: id },
+      { withCredentials: true }
+    );
+
+    if (res.data.following) setFollowState("following");
+    else if (res.data.requested) setFollowState("requested");
+    else setFollowState("none");
+  } catch (err) {
+    console.error("Follow error:", err);
+  }
+};
+
+// Handle actual unfollow
+const handleUnfollow = async () => {
+  try {
+    await axios.post(
+      `${BASE_URL}/api/follow/unfollow`,
+      { receiverId: id },
+      { withCredentials: true }
+    );
+    setFollowState("none");
+    setShowUnfollowModal(false);
+  } catch (err) {
+    console.error("Unfollow error:", err);
+  }
+};
+
+//fetch follow status
+useEffect(() => {
+  const fetchFollowState = async () => {
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/api/users/status/${id}`,
+        { withCredentials: true }
+      );
+
+      if (res.data.following) {
+        setFollowState("following");
+      } else if (res.data.requested) {
+        setFollowState("requested");
+      } else {
+        setFollowState("none");
+      }
+    } catch (err) {
+      console.error("Error fetching follow status:", err);
+    }
+  };
+
+  fetchFollowState();
+}, [id]);
+
+
 
   // Fetch user profile
   useEffect(() => {
@@ -75,11 +149,8 @@ const ProfilePage = () => {
 }, [id]);
 
   if (!user || loading) {
-    return (
-      <div className="flex justify-center items-center h-screen text-white">
-        Loading...
-      </div>
-    );
+     return <BareHomePage />;
+
   }
 
   return (
@@ -121,6 +192,26 @@ const ProfilePage = () => {
                     : user.name}
                 </h2>
                 <p className="text-txt2 dark:text-dtxt2 text-sm">{user.email}</p>
+                <section className="w-fit flex gap-4 mt-[10px]">
+                  <button
+                    onClick={handleFollow}
+                    className={
+                      `py-1 px-2 rounded-[5px] ` +
+                      (followState === "requested"
+                        ? "bg-dgradient-main"
+                        : followState === "following"
+                        ? "bg-lightMain dark:bg-dlightMain"
+                        : "bg-gradient-main")
+                    }
+                  >
+                    {followState === "following"
+                      ? "Following"
+                      : followState === "requested"
+                      ? "Requested"
+                      : "Follow"}
+                  </button>
+                  <button  className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
+                </section>
               </div>
 
               <div className="w-full flex justify-around text-[1.5rem]">
@@ -201,7 +292,41 @@ const ProfilePage = () => {
           </div>
         )}
       </div>
+      {showUnfollowModal && (
+  <>
+    {/* Background overlay */}
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40"
+      onClick={() => setShowUnfollowModal(false)}
+    ></div>
+
+    {/* Modal */}
+    <div className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-lightMain dark:bg-dlightMain p-3 rounded-lg w-[90%] max-w-sm shadow-lg">
+  <h3 className="text-lg font-bold text-center text-gray-900 dark:text-white m-4">
+    Unfollow <span className="text-transparent bg-clip-text font-bold bg-gradient-main">{user.name}?</span>
+  </h3>
+  <p className="text-sm text-center text-txt2 dark:text-dtxt2 mb-6">
+    Are you sure you want to unfollow this user?
+  </p>
+  <div className="flex justify-between gap-4 font-semibold">
+    <button
+      onClick={() => setShowUnfollowModal(false)}
+      className="flex-1 py-2 rounded-md border-[2px] bg-main text-txt text-center"
+    >
+      Cancel
+    </button>
+    <button
+      onClick={handleUnfollow}
+      className="flex-1 py-2 rounded-md  bg-black text-white text-center"
+    >
+      Unfollow
+    </button>
+  </div>
+</div>
+  </>
+)}
     </div>
+    
   );
 };
 
