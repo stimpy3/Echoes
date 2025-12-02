@@ -267,15 +267,15 @@ const handleDeleteNotif = async (notifId) => {
          
            {/* Dropdown */}
            {openNotif && (
-             <div className="absolute right-0 top-[48px] w-[320px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md p-1 backdrop-blur-md">
+             <div className="absolute right-0 top-[48px] w-fit p-[5px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md backdrop-blur-md">
          
                {notifications.length === 0 ? (
-                  <p className="text-sm text-txt dark:text-dtxt">No notifications yet</p>
+                  <p className="text-sm text-txt p-[2px] w-fit dark:text-dtxt whitespace-nowrap">No notifications yet</p>
                 ) : (
                   notifications.map((req, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between gap-2 py-1 border-b border-gray-300 last:border-none"
+                      className="flex items-center min-w-[320px] justify-between gap-2 py-1 border-b border-gray-300 last:border-none"
                     >
                 
                       {/* Avatar */}

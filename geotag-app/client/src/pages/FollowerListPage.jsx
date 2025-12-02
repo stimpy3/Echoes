@@ -55,7 +55,7 @@ const FollowerListPage = () => {
             >
              {user.profilePic ? (
                 <img
-                  src={profilePic}
+                  src={user.profilePic}
                   className="w-10 h-10 rounded-full border-4 border-main dark:border-dmain object-cover"
                 />
               ) : (

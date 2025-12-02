@@ -192,16 +192,16 @@ useEffect(() => {
                     : user.name}
                 </h2>
                 <p className="text-txt2 dark:text-dtxt2 text-sm">{user.email}</p>
-                <section className="w-fit flex gap-4 mt-[10px]">
+                <section className="w-fit flex gap-4 mt-[10px] ">
                   <button
                     onClick={handleFollow}
                     className={
                       `py-1 px-2 rounded-[5px] ` +
                       (followState === "requested"
-                        ? "bg-dgradient-main"
+                        ? "bg-lgradient-main dark:bg-dgradient-main text-txt dark:text-dtxt"
                         : followState === "following"
                         ? "bg-lightMain dark:bg-dlightMain"
-                        : "bg-gradient-main")
+                        : "bg-gradient-main text-dtxt")
                     }
                   >
                     {followState === "following"

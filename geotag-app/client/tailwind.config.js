@@ -79,7 +79,8 @@ export default {
       backgroundImage: {
         'gradient-main': 'linear-gradient(90deg, #fc9b41ff, #d557e3ff, #3ed8e3ff)',
          'gradient-main2': 'linear-gradient(90deg, #a66529ff, #953b9fff, #2d9097ff)',
-        'dgradient-main': 'linear-gradient(90deg, #5b3f26ff, #492a4dff, #1f4043ff)'
+        'dgradient-main': 'linear-gradient(90deg, #5b3f26ff, #492a4dff, #1f4043ff)',
+        'lgradient-main': 'linear-gradient(90deg, #ffdab8ff, #f8beffff, #c7fbffff)',
       },
       borderRadius: {
         lg: 'var(--radius)',

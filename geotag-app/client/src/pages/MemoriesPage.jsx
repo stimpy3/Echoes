@@ -315,11 +315,15 @@ const MemoriesPage = () => {
                       handleRequest(i, user._id);
                     }}
                     className={`w-full p-[6px] rounded-[5px] text-white transition ${
-                      user.isRequested ? "bg-dgradient-main" : "bg-gradient-main"
+                      user.isRequested ? "bg-lgradient-main  dark:bg-dgradient-main" : "bg-gradient-main"
                     }`}
                   >
-                    {user.isRequested ? "Requested" : (
-                      <div className="flex justify-center items-center">
+                    {user.isRequested ? (
+                      <div className="flex justify-center items-center text-txt dark:text-dtxt">
+                        Requested
+                      </div>
+                    ): (
+                      <div className="flex justify-center items-center ">
                         <UserPlus /> &nbsp; Follow
                       </div>
                     )}
