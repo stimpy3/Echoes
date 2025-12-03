@@ -210,7 +210,7 @@ useEffect(() => {
                       ? "Requested"
                       : "Follow"}
                   </button>
-                  <button  className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
+                  <button onClick={()=>navigate("/chat")}  className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
                 </section>
               </div>
 

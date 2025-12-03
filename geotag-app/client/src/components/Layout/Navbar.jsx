@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useState,useEffect,useRef } from 'react';
 import { NavLink } from "react-router-dom";
-import { MoonStar,SunMedium,LogOut,ChevronDown,User,ChartNoAxesColumn, MapPinHouse,Bell } from 'lucide-react';
+import { MoonStar,SunMedium,LogOut,ChevronDown,User,ChartNoAxesColumn, MapPinHouse,Bell,MessageCircleMore } from 'lucide-react';
+
 import { useTheme } from "../../context/ThemeContext";
 import { useHome } from '../../context/HomeContext';
 import Modal from "./Modal";
@@ -155,6 +156,11 @@ const handleDeleteNotif = async (notifId) => {
 
   fetchAddress();
 }, [homePosition]);
+
+    //chat redirect
+    const handleChat=()=>{
+    navigate('/chat');
+    }
   
 
    const logOutUser = async () => {
@@ -334,12 +340,8 @@ const handleDeleteNotif = async (notifId) => {
            < MapPinHouse/>
          </button>
          
-         <button onClick={() => setDark(prev => !prev)} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
-           {dark ? (
-             <SunMedium className="scale-[1.1] transition-all duration-300" />
-           ) : (
-             <MoonStar className="scale-[1.1] transition-all duration-300" />
-           )}
+         <button onClick={handleChat} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full mr-5">
+           <MessageCircleMore/>
          </button>
 
          
@@ -376,6 +378,14 @@ const handleDeleteNotif = async (notifId) => {
               <div className="profileOptions absolute top-[50px] rounded-md right-[0px] h-fit w-fit bg-white/95 dark:bg-dborderColor/95 backdrop-blur-md border-[1px]
            border-borderColor dark:border-dborderColor shadow-lg p-[5px]">
                   
+                   
+                   <button onClick={() => setDark(prev => !prev)} className="flex text-borderColor dark:text-dlightTxt items-center justify-start h-full w-full">
+                     {dark ? (
+                       <div className="flex justify-start text-[0.9rem] text-lightTxt dark:text-dlightTxt"><SunMedium className=" transition-all duration-300 pr-[5px]" /> <p>Light Mode</p></div>
+                     ) : (
+                        <div className="flex justify-start text-[0.9rem] text-lightTxt dark:text-dlightTxt"><MoonStar className=" transition-all duration-300 pr-[5px]" /><p>Dark Mode</p></div>
+                     )}
+                   </button>
                    <NavLink to="/analytics" className='text-[0.9rem] h-full flex py-[5px] w-full border-t-[1px] border-borderColor dark:border-dborderColor text-lightTxt dark:text-dlightTxt'>
                       <ChartNoAxesColumn className='scale-[0.8]' /><p className='pl-[5px] whitespace-nowrap w-[90px] flex justify-start'>Analytics</p>
                    </NavLink>

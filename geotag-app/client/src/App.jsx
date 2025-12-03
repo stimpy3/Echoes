@@ -5,7 +5,8 @@ import MemoriesPage from './pages/MemoriesPage';
 import FollowerListPage from './pages/FollowerListPage';
 import FollowingListPage from './pages/FollowingListPage';
 import TimelinePage from './pages/TimelinePage';
-import AnalyticsPage from './pages/AnalyticsPage'
+import AnalyticsPage from './pages/AnalyticsPage';
+import ChatPage from "./pages/ChatPage";
 import AuthPage from './pages/auth/AuthPage';
 import ProfilePage from "./pages/ProfilePage";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -25,6 +26,7 @@ function App() {
           <Route path="/following" element={<FollowingListPage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/timeline" element={<TimelinePage />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/" element={<AuthPage />} />
         </Routes>
