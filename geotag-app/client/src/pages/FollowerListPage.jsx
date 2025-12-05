@@ -37,8 +37,8 @@ const FollowerListPage = () => {
           <ChevronLeft className="text-txt dark:text-dtxt" size={28} />
           <span className="text-txt dark:text-dtxt text-lg">Back</span>
         </div>
-        <h1 className="text-xl font-bold text-txt dark:text-dtxt w-full flex justify-center items-center">
-          Followers
+        <h1 className="text-xl font-bold w-full flex justify-center items-center">
+          <span className="text-transparent bg-clip-text bg-gradient-main ">Followers</span>
         </h1>
       </div>
 
