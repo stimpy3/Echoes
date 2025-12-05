@@ -196,7 +196,7 @@ const MemoriesPage = () => {
       });
       setFollowersCount(res.data.followerCount);  // match backend keys
       setFollowingCount(res.data.followingCount);
-      console.log("Follow counts fetched:", res.data);
+
     } catch (err) {
       console.error("Error fetching follow counts:", err);
     }

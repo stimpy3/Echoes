@@ -187,7 +187,6 @@ const handleDeleteNotif = async (notifId) => {
         { withCredentials: true }
       );
       setNotifications(res.data);
-      console.log("Fetched notifications:", res.data);
     } catch (err) {
       console.log("Notif fetch error:", err);
     }

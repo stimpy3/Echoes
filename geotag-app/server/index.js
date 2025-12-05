@@ -1,5 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const mongoose = require('mongoose');
+const { applyTimestamps } = require('./models/users');
+const http = require('http');
+const { Server } = require('socket.io');
+require('dotenv').config(); // loads .env variables
+//But for local development or manual setups, it’s essential.
+
 const authRoutes = require('./routes/authRoutes'); 
 const navbarRoutes = require('./routes/navbarRoutes'); 
 const locationRoutes = require('./routes/locationRoutes'); 
@@ -7,11 +15,8 @@ const memoryRoutes = require('./routes/memoryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const userRoutes = require("./routes/userRoutes");
 const followRequestRoutes = require("./routes/followRequestRoutes")
-const cookieParser = require('cookie-parser');
-const mongoose = require('mongoose');
-const { applyTimestamps } = require('./models/users');
-require('dotenv').config(); // loads .env variables
-//But for local development or manual setups, it’s essential.
+
+
 
 const app = express();
 /*it creates an Express application object

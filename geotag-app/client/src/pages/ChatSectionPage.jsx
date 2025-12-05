@@ -1,16 +1,22 @@
 import { useState,useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+
 
 const ChatSectionPage= ({ id, name, profilePic }) => {
      
      const [messages, setMessages] = useState([]);
      const textareaRef = useRef();
      const messagesContainerRef = useRef(null); // ref to scroll to
+     const navigate = useNavigate();
 
     const handleInput = (e) => {
     const ta = e.target;
     ta.style.height = "40px"; 
     ta.style.height = Math.min(ta.scrollHeight, 100) + "px";
   };
+
+   //redirect to profile page
+    const goToProfile = (userId) => navigate(`/profile/${userId}`);
 
     // Send message
   const sendMessage = () => {
@@ -50,18 +56,20 @@ const ChatSectionPage= ({ id, name, profilePic }) => {
     return(
          <div className="relative flex flex-col w-full h-screen overflow-hidden bg-lightMain dark:bg-dfadeColor  ">
                <section className="w-full bg-main dark:bg-dmain h-[50px] p-[10px] flex items-center">
+                 <button  className="h-fit w-fit flex" onClick={() => goToProfile(id)}>
                  <div className="h-fit w-fit mr-[10px]">
                     {profilePic?
                      
-                       <img src={profilePic} alt="pfp" className="w-[50px] h-[30px] rounded-full object-cover"/>
+                       <img src={profilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
      
                       :
                       <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
-                          <i className="fa-solid fa-user text-[2rem] text-gray-200 dark:text-gray-400"></i>
+                          <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
                       </div>
                       }
                  </div>
-                 <p className="text-[1.2rem]">{name}</p>
+                 <p className="text-[1rem]">{name}</p>
+                 </button>
                 </section>
 
 

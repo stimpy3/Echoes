@@ -6,7 +6,6 @@ const Memory=require('../models/memories')
 
 router.get('/totalmemorycount',verifyToken,async(req,res)=>{
    const count = await Memory.countDocuments({ userId: req.userId });//counts without fetching all documents
-   console.log(count);
    res.status(200).json({count:count});
 });
 

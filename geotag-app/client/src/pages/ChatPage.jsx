@@ -1,5 +1,5 @@
 import { ChevronLeft,Search,MessageSquareDot } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate,useLocation } from "react-router-dom";
 import { useState,useEffect, use } from "react";
 import ChatSectionPage from "./ChatSectionPage"; 
 import axios from "axios";
@@ -11,7 +11,10 @@ const flag= true; //toggle this to show chat section or not
 const [userList,setUserList]= useState([]);
 const [openChat,setOpenChat]= useState(false);
 const [currentChatUser,setCurrentChatUser]= useState({});
+const [selectedUserId, setSelectedUserId] = useState(null);
+
  const navigate = useNavigate();
+ const location = useLocation();
 
  useEffect(() => {
     // Fetch the list of users the current user is following  
@@ -30,9 +33,20 @@ const [currentChatUser,setCurrentChatUser]= useState({});
 },
  [])
 
- const handleOpenchat= (id,name,profile) => {
+ // Check if user came from a "Message" button with state
+  useEffect(() => {
+    if (location.state) {
+      const { id, name, profilePic } = location.state;
+      setCurrentChatUser({ id, name, profilePic });
+      setOpenChat(true);
+      navigate("/chat", { replace: true }); // optional: clears location.state
+    }
+  }, [location.state]);
+
+ const handleOpenChat= (id,name,profilePic) => {
    setOpenChat(true);
-   setCurrentChatUser({id,name,profile});
+   setCurrentChatUser({id,name,profilePic});
+    setSelectedUserId(id); // mark as selected
  };
 
   return(
@@ -72,42 +86,47 @@ const [currentChatUser,setCurrentChatUser]= useState({});
             </div>{/*chat search and header section end */}
 
             <section className="w-full h-full">
-  {userList.length === 0 ? (
-    <p>follow people to chat</p>
-  ) : (
-    userList.map((user) => (
-      <div 
-        onClick={()=>{handleOpenchat(user._id, user.name, user.profilePic)}}
-        key={user._id} 
-        className="w-full h-[60px] flex items-center gap-4 p-3 bg-lightMain dark:bg-dlightMain border-y-[1px] border-borderColor dark:border-dborderColor cursor-pointer"
-      >
-        <div className="h-fit w-fit">
-          {user.profilePic?
-                
-                  <img src={user.profilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
+                         {userList.length === 0 ? (
+                           <p></p>
+                         ) : (
+                           userList.map((user) => (
+                                  <div
+                                    onClick={() => handleOpenChat(user._id, user.name, user.profilePic)}
+                                    key={user._id}
+                                    className={`w-full h-[60px] flex items-center gap-4 p-3 
+                                      cursor-pointer 
+                                      ${selectedUserId === user._id ? " border-y-[1px]  bg-main dark:bg-dlightMain" : ""}`}
+                                  >
+                                    <div className="h-fit w-fit">
+                                      {user.profilePic ? (
+                                        <img
+                                          src={user.profilePic}
+                                          alt="pfp"
+                                          className="w-[30px] h-[30px] rounded-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dborderColor rounded-full flex justify-center items-end overflow-hidden">
+                                          <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div>{user.name}</div>
+                                  </div>
+                                ))
+                       
+                         )}
+            </section>
 
-                 :
-                 <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dborderColor rounded-full flex justify-center items-end overflow-hidden">
-                     <i className="fa-solid fa-user text-[2rem] text-gray-200 dark:text-gray-400"></i>
-                 </div>
-                 }
-        </div>
-        <div>{user.name}</div>
-      </div>
-    ))
-  )}
-</section>
-
-        </section>
-
-        {/* right panel - real chat */}
-        {openChat? <ChatSectionPage id={currentChatUser.id} name={currentChatUser.name} profilePic={currentChatUser.profilePic} /> :
-         <section  className="w-full bg-main dark:bg-dmain h-full flex flex-col items-center justify-center ">
-           <div className="h-[200px] bg-[url('/lightLogo.png')] dark:bg-[url('/grayLogo.png')] bg-contain bg-no-repeat aspect-[445/549]">
-           </div>
-           <p  className="text-[#dedede] dark:text-dborderColor font-bold">Your chats appear here</p>
-        </section>
-        }
+            </section>
+    
+            {/* right panel - real chat */}
+            {openChat? <ChatSectionPage id={currentChatUser.id} name={currentChatUser.name} profilePic={currentChatUser.profilePic} /> :
+             <section  className="w-full bg-main dark:bg-dmain h-full flex flex-col items-center justify-center ">
+               <div className="h-[200px] bg-[url('/lightLogo.png')] dark:bg-[url('/grayLogo.png')] bg-contain bg-no-repeat aspect-[445/549]">
+               </div>
+               <p  className="text-[#dedede] dark:text-dborderColor font-bold">Your chats appear here</p>
+            </section>
+            }
        
     </div>
   );

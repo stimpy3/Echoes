@@ -139,7 +139,6 @@ useEffect(() => {
       });
       setFollowersCount(res.data.followerCount);  // match backend keys
       setFollowingCount(res.data.followingCount);
-      console.log("Follow counts fetched:", res.data);
     } catch (err) {
       console.error("Error fetching follow counts:", err);
     }
@@ -210,7 +209,14 @@ useEffect(() => {
                       ? "Requested"
                       : "Follow"}
                   </button>
-                  <button onClick={()=>navigate("/chat")}  className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
+                  <button onClick={()=> navigate("/chat", {
+                                        state: {
+                                          id: user._id,
+                                          name: user.name,
+                                          profilePic: user.profilePic
+                                        }
+                                      })}  
+                 className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
                 </section>
               </div>
 

@@ -23,7 +23,6 @@ const [monthlyData, setMonthlyData] = useState([]);
     const fetchMonthlyMemoryCount = async () => {
       try {
         const res = await axios.get(`${BASE_URL}/api/analytics/monthlymemorycount`, { withCredentials: true });
-        console.log("Backend monthly data:", res.data);
 
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

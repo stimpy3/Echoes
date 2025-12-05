@@ -113,7 +113,6 @@ const Signup = ({ onSwitchToLogin }) => {
       console.error(err);
       setError(err.response?.data?.message || 'Something went wrong!');
     } finally {
-      console.log("");//remove later
       setLoading(false);
     }
   
