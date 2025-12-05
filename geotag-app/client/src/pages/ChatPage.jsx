@@ -84,7 +84,7 @@ const [currentChatUser,setCurrentChatUser]= useState({});
         <div className="h-fit w-fit">
           {user.profilePic?
                 
-                  <img src={profilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
+                  <img src={user.profilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
 
                  :
                  <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dborderColor rounded-full flex justify-center items-end overflow-hidden">
