@@ -95,29 +95,33 @@ input,textarea{
 /* Custom scrollbar */
 .scrollbar-custom {
   scrollbar-width: thin;           /* Firefox */
-  scrollbar-color: blue; /* Firefox */
+  scrollbar-color: #4b5563 #d1d5db; /* Firefox - thumb (dark gray) track (gray) */
 }
 
 /* Chrome, Edge, Safari */
 .scrollbar-custom::-webkit-scrollbar {
   width: 8px;                      /* width of scrollbar */
-  scrollbar-color: blue;
-   background-color: blue; /* track color */
 }
 
 .scrollbar-custom::-webkit-scrollbar-track {
-  background-color: blue; /* track color */
+  background-color: #141414ff; /* track color - gray */
   border-radius: 4px;
 }
 
 .scrollbar-custom::-webkit-scrollbar-thumb {
-  background-color: black; /* bar color */
+  background-color: #4b5563; /* bar color - dark gray */
   border-radius: 4px;
   border: 2px solid transparent; /* adds some spacing around thumb */
   background-clip: content-box;
 }
 
-
+.scrollbar-custom::-webkit-scrollbar-track-piece  {
+background-color: #C2D2E4;
+}
+.scrollbar-custom::-webkit-scrollbar-thumb:vertical {
+height: 30px;
+background-color: #0A4C95;
+}
 /* -------------------------------------------------------------------------------------------------------- */
 
 

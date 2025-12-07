@@ -1,9 +1,11 @@
 import { useState,useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 
-const ChatSectionPage= ({ id, name, profilePic }) => {
-     
+const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiverProfilePic }) => {
+     const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
+
      const [messages, setMessages] = useState([]);
      const textareaRef = useRef();
      const messagesContainerRef = useRef(null); // ref to scroll to
@@ -18,15 +20,39 @@ const ChatSectionPage= ({ id, name, profilePic }) => {
    //redirect to profile page
     const goToProfile = (userId) => navigate(`/profile/${userId}`);
 
-    // Send message
-  const sendMessage = () => {
-    const text = textareaRef.current.value.trim();
-    if (!text) return;
 
-    setMessages((prev) => [...prev, text]);
-    textareaRef.current.value = "";
-    textareaRef.current.style.height = "40px"; // reset height
-  };
+
+  // Send message
+  const sendMessage = async () => {
+         const text = textareaRef.current.value.trim();
+         if (!text) return;
+       
+         textareaRef.current.value = "";
+         textareaRef.current.style.height = "40px";
+
+
+          const optimisticMessage = {
+            _id: Date.now(), // temporary ID
+            text,
+            isOwn: true,
+            createdAt: new Date(),
+          };
+          setMessages(prev => [...prev, optimisticMessage]);
+ 
+         // Send to backend
+         try {
+           await axios.post(`${BASE_URL}/api/messages/sendmessage`, {
+             receiver: receiverId,
+             text
+           }, { withCredentials: true });
+           refreshChats();
+         } catch (err) {
+           console.error("Error sending message:", err);
+           //Rollback: remove optimistic message if request fails
+           setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+         }
+    };
+
 
   // Handle Enter key
   const handleKeyDown = (e) => {
@@ -41,7 +67,24 @@ const ChatSectionPage= ({ id, name, profilePic }) => {
     if (container) {
       container.scrollTop = container.scrollHeight; // instantly scroll
     }
-  }, [messages])
+  }, [messages]);
+
+
+  useEffect(() => {
+       setMessages([]);
+       if (!chatId) return;
+       const getMessages = async (chatId) => {
+          try{
+          const res = await axios.get(`${BASE_URL}/api/messages/${chatId}`, { withCredentials: true });
+          setMessages(res.data);
+          }
+           catch(err){ 
+             console.error("Error fetching messages:", err);
+           }
+      
+      }
+      getMessages(chatId);
+    },[chatId]);
     /*
     {profilePic?
                 
@@ -56,11 +99,11 @@ const ChatSectionPage= ({ id, name, profilePic }) => {
     return(
          <div className="relative flex flex-col w-full h-screen overflow-hidden bg-lightMain dark:bg-dfadeColor  ">
                <section className="w-full bg-main dark:bg-dmain h-[50px] p-[10px] flex items-center">
-                 <button  className="h-fit w-fit flex" onClick={() => goToProfile(id)}>
+                 <button  className="h-fit w-fit flex" onClick={() => goToProfile(receiverId)}>
                  <div className="h-fit w-fit mr-[10px]">
-                    {profilePic?
+                    {receiverProfilePic?
                      
-                       <img src={profilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
+                       <img src={receiverProfilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
      
                       :
                       <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
@@ -68,20 +111,34 @@ const ChatSectionPage= ({ id, name, profilePic }) => {
                       </div>
                       }
                  </div>
-                 <p className="text-[1rem]">{name}</p>
+                 <p className="text-[1rem]">{receiverName}</p>
                  </button>
                 </section>
 
 
                 {/*User sending messages */}
-                <div ref={messagesContainerRef} className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom">
-                    {messages.map((msg, idx) => (
-                      <div key={idx} className="max-w-[300px] w-fit h-fit mb-[3px] p-2 bg-dmain text-white rounded-lg whitespace-pre-wrap  <!-- wrap long text --> 
-                               break-words<!-- don't increase width -->">
-                        {msg}
-                      </div>
-                    ))}
-                  </div>
+               
+               <div ref={messagesContainerRef} className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom">
+                    {messages.map((msg, idx) => {
+                      const prevMsg = messages[idx - 1];
+                      const isDifferentSender = prevMsg ? prevMsg.isOwn !== msg.isOwn : false;
+                      return (
+                        <div
+                          key={idx}
+                          className={`
+                            max-w-[300px] w-fit h-fit p-2 rounded-lg whitespace-pre-wrap break-words
+                            ${msg.isOwn ? 'bg-dmain self-start text-white' : 'bg-gradient-main2 self-end text-white'}
+                            ${isDifferentSender ? 'mt-6' : 'mt-1'}
+                          `}
+                        >
+                          {msg.text}
+                        </div>
+                      );
+                    })}
+               </div>
+                  
+                    
+
             
 
                <div className="absolute z-[5] bottom-[20px] p-[20px]  w-full max-h-[100px] flex justify-center items-center">

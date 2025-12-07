@@ -14,7 +14,9 @@ const locationRoutes = require('./routes/locationRoutes');
 const memoryRoutes = require('./routes/memoryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const userRoutes = require("./routes/userRoutes");
-const followRequestRoutes = require("./routes/followRequestRoutes")
+const followRequestRoutes = require("./routes/followRequestRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 
 
 
@@ -126,6 +128,8 @@ app.use('/api/memory',memoryRoutes);
 app.use('/api/analytics',analyticsRoutes);
 app.use('/api/users',userRoutes);
 app.use("/api/follow", followRequestRoutes);
+app.use("/api/chats", chatRoutes);
+app.use("/api/messages", messageRoutes);
 
 //When a request comes in, Express checks the path.
 //If the path starts with /api/auth, it forwards the request to the authRoutes router.
