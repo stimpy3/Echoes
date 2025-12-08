@@ -77,10 +77,11 @@ export default {
         }
       },
       backgroundImage: {
-        'gradient-main': 'linear-gradient(90deg, #fc9b41ff, #d557e3ff, #3ed8e3ff)',
-         'gradient-main2': 'linear-gradient(90deg, #a66529ff, #953b9fff, #2d9097ff)',
-        'dgradient-main': 'linear-gradient(90deg, #5b3f26ff, #492a4dff, #1f4043ff)',
-        'lgradient-main': 'linear-gradient(90deg, #ffdab8ff, #f8beffff, #c7fbffff)',
+        'gradient-main': 'linear-gradient(45deg, #fc9b41ff, #d557e3ff, #3ed8e3ff)',
+         'gradient-mainBright': 'linear-gradient(135deg, #ff922bff, #eb39ffff, #30a2ffff)',
+         'gradient-main2': 'linear-gradient(45deg, #a66529ff, #953b9fff, #2d9097ff)',
+        'dgradient-main': 'linear-gradient(45deg, #5b3f26ff, #492a4dff, #1f4043ff)',
+        'lgradient-main': 'linear-gradient(45deg, #ffdab8ff, #f8beffff, #c7fbffff)',
       },
       borderRadius: {
         lg: 'var(--radius)',

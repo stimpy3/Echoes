@@ -104,16 +104,30 @@ useEffect(() => {
   refreshChats();
 }, [myId]);
 
+//handle message button chat redirect
+useEffect(() => {
+  const run = async () => {
+    if (!location.state) return;
 
- // Check if user came from a "Message" button with state
-  useEffect(() => {
-    if (location.state) {
-      const { id, name, profilePic } = location.state;
-      setCurrentChatUser({ id, name, profilePic });
+    const { id, name, profilePic } = location.state;
+
+    setCurrentChatUser({ id, name, profilePic });
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/api/chats/mark-read/${id}`,
+        {},
+        { withCredentials: true }
+      );
+      setChatId(res.data.chatId);
       setOpenChat(true);
-      navigate("/chat", { replace: true }); // optional: clears location.state
+    } catch (err) {
+      console.error("Error marking read:", err);
     }
-  }, [location.state]);
+  };
+
+  run();
+}, [location.state]);
+
 
  const handleOpenChat= async (chatId,id,name,profilePic) => {
        setOpenChat(true);
@@ -147,7 +161,7 @@ useEffect(() => {
      
                       <div className="w-full h-full mb-[10px] flex justify-center items-center font-semibold text-[1.3rem]
                       text-transparent bg-clip-text bg-gradient-main">
-                        <h1 className="text-transparent bg-clip-text bg-gradient-main ">Messages</h1>
+                        <h1 className="text-transparent bg-clip-text bg-gradient-mainBright ">Messages</h1>
                       </div>
                  </div>
 

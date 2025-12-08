@@ -1,5 +1,6 @@
 import { useState,useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { formatTime } from "../utils/formatTime";
 import axios from "axios";
 
 
@@ -103,7 +104,7 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
                  <div className="h-fit w-fit mr-[10px]">
                     {receiverProfilePic?
                      
-                       <img src={receiverProfilePic} alt="pfp" className="w-[30px] h-[30px] rounded-full object-cover"/>
+                       <img src={receiverProfilePic} alt="pfp" className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"/>
      
                       :
                       <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
@@ -118,21 +119,60 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
 
                 {/*User sending messages */}
                
-               <div ref={messagesContainerRef} className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom">
+               <div ref={messagesContainerRef} className="flex flex-col  w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom">
                     {messages.map((msg, idx) => {
                       const prevMsg = messages[idx - 1];
                       const isDifferentSender = prevMsg ? prevMsg.isOwn !== msg.isOwn : false;
                       return (
-                        <div
-                          key={idx}
-                          className={`
-                            max-w-[300px] w-fit h-fit p-2 rounded-lg whitespace-pre-wrap break-words
-                            ${msg.isOwn ? 'bg-dmain self-start text-white' : 'bg-gradient-main2 self-end text-white'}
-                            ${isDifferentSender ? 'mt-6' : 'mt-1'}
-                          `}
-                        >
-                          {msg.text}
-                        </div>
+                        <div key={idx} className={`w-full h-fit flex items-center gap-2 ${
+                           msg.isOwn ? "justify-end" : "justify-start"}`}>
+                          
+                            {/* Sender Dot */}
+                            <div
+                              className={`w-[30px] h-[30px] rounded-full ${
+                                isDifferentSender
+                                  ? "mt-6"
+                                  : "mt-1"
+                              }`}
+                            >
+                               {isDifferentSender || idx==0 ? (!msg.isOwn? (receiverProfilePic?        
+                                       <img src={receiverProfilePic} alt="pfp" className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"/>
+                                      :
+                                      <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
+                                          <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
+                                      </div>)
+                                      :
+                                      "")
+                                      :
+                                      ""
+                               }
+                            </div>
+                          
+                            {/* Message Bubble */}
+                            <div
+                              className={`
+                                max-w-[300px] flex flex-col w-fit h-fit p-2 rounded-lg whitespace-pre-wrap break-words
+                                ${msg.isOwn
+                                  ? "bg-gradient-mainBright text-dtxtLight font-medium "
+                                  : "bg-main dark:bg-dmain self-start text-txt dark:text-dtxt"
+                                }
+                                ${isDifferentSender ? "mt-6" : "mt-1"}
+                              `}
+                            >  
+                              {msg.text}
+                          
+                              <p
+                                className={`text-[0.7rem] text-right ${
+                                  msg.isOwn
+                                    ? "text-dborderColor font-semibold"
+                                    : "text-dtxt2 dark:text-txt2 font-medium"
+                                }`}
+                              >
+                                {formatTime(msg.createdAt)}
+                              </p>
+                            </div>
+                          
+                          </div>
                       );
                     })}
                </div>

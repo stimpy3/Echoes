@@ -15,13 +15,13 @@ router.post("/mark-read/:otherUserId", verifyToken , async (req, res) => {
       participants: { $all: [myId, otherId] }
     });
 
-    if (!chat) return res.json({ success: true });
+    if (!chat) return res.json({ success: true,chatId: null });
 
     // Reset unread
     chat.unreadCount.set(myId.toString(), 0);
     await chat.save();
 
-    res.json({ success: true });
+    res.json({ success: true,chatId: chat._id });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to mark as read" });

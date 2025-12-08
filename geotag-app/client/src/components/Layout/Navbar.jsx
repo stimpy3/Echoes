@@ -352,7 +352,7 @@ const handleDeleteNotif = async (notifId) => {
              <div className="overflow-hidden flex w-[50px] h-full bg-main/50 dark:bg-dborderColor/50 backdrop-blur-[2px] rounded-full hover:w-[200px] transition-all duration-300">           
                  {profilePic?
                 
-                  <img src={profilePic} alt="pfp" className="w-[50px] h-[50px] rounded-full object-cover"/>
+                  <img src={profilePic} alt="pfp" className="border-borderColor w-[50px] h-[50px] rounded-full object-cover"/>
 
                  :
                  <div className="aspect-square min-w-[50px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">

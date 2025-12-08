@@ -152,6 +152,17 @@ useEffect(() => {
 
   }
 
+  const handleOpenChat= async()=>{
+    navigate("/chat", {
+       state: {
+         id: user._id,
+         name: user.name,
+         profilePic: user.profilePic
+       }
+     });
+    
+  }
+
   return (
     <div className="bg-main dark:bg-dmain w-full min-h-screen h-fit flex flex-col px-[30px] pb-[10px]">
       <div
@@ -209,13 +220,7 @@ useEffect(() => {
                       ? "Requested"
                       : "Follow"}
                   </button>
-                  <button onClick={()=> navigate("/chat", {
-                                        state: {
-                                          id: user._id,
-                                          name: user.name,
-                                          profilePic: user.profilePic
-                                        }
-                                      })}  
+                  <button onClick={handleOpenChat}  
                  className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">Message</button>
                 </section>
               </div>
