@@ -6,6 +6,19 @@ const Message= require('../models/message');
 const User= require('../models/users');
 
 
+
+// router.get("/:chatId", async (req, res) => {
+//   const { chatId } = req.params;
+//   try {
+//     const chat = await Chat.findById(chatId).select("updatedAt lastMessage participants");
+//     if (!chat) return res.status(404).json({ error: "Chat not found" });
+//     res.json(chat);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
 router.post("/mark-read/:otherUserId", verifyToken , async (req, res) => {
   const myId = req.userId;
   const otherId = req.params.otherUserId;

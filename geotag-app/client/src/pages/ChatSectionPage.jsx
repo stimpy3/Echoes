@@ -1,6 +1,7 @@
 import { useState,useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatTime } from "../utils/formatTime";
+import { formatDDMMYY } from "../utils/formatDDMMYY";
 import axios from "axios";
 
 
@@ -38,6 +39,7 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
             isOwn: true,
             createdAt: new Date(),
           };
+          
           setMessages(prev => [...prev, optimisticMessage]);
  
          // Send to backend
@@ -69,7 +71,7 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
       container.scrollTop = container.scrollHeight; // instantly scroll
     }
   }, [messages]);
-
+{/* <p className="w-full h-fit text-txt2 dark:text-txt2 text-[0.7rem] text-center my-[10px]">12 dec</p> */}
 
   useEffect(() => {
        setMessages([]);
@@ -86,17 +88,18 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
       }
       getMessages(chatId);
     },[chatId]);
-    /*
-    {profilePic?
-                
-                  <img src={profilePic} alt="pfp" className="w-[50px] h-[50px] rounded-full object-cover"/>
 
-                 :
-                 <div className="aspect-square min-w-[50px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
-                     <i className="fa-solid fa-user text-[2rem] text-gray-200 dark:text-gray-400"></i>
-                 </div>
-                 }
-     */
+  const isDifferentDay=(msg1, msg2)=> {
+     if (!msg1 || !msg2) return true; // first message is always a new day
+
+       const d1 = new Date(msg1.createdAt); // convert string to Date
+       const d2 = new Date(msg2.createdAt);
+
+       
+     return d1.getFullYear() !== d2.getFullYear() || d1.getMonth() !== d2.getMonth() || d1.getDate() !== d2.getDate();
+}
+
+                 
     return(
          <div className="relative flex flex-col w-full h-screen overflow-hidden bg-lightMain dark:bg-dfadeColor  ">
                <section className="w-full bg-main dark:bg-dmain h-[50px] p-[10px] flex items-center">
@@ -118,15 +121,21 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
 
 
                 {/*User sending messages */}
-               
                <div ref={messagesContainerRef} className="flex flex-col  w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom">
+                    
                     {messages.map((msg, idx) => {
                       const prevMsg = messages[idx - 1];
                       const isDifferentSender = prevMsg ? prevMsg.isOwn !== msg.isOwn : false;
+                     const diffDay = !prevMsg || isDifferentDay(prevMsg, msg);
                       return (
+                        <div className="w-full h-fit flex flex-col">
+                        {diffDay?<p className="w-full text-center h-fit text-txt2 dark:text-txt2 text-[0.7rem] mt-[20px] mb-[10px]">{formatDDMMYY(msg.createdAt)}</p>
+                        :
+                        ""}
+                        
                         <div key={idx} className={`w-full h-fit flex items-center gap-2 ${
                            msg.isOwn ? "justify-end" : "justify-start"}`}>
-                          
+                             
                             {/* Sender Dot */}
                             <div
                               className={`w-[30px] h-[30px] rounded-full ${
@@ -135,6 +144,7 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
                                   : "mt-1"
                               }`}
                             >
+                               
                                {isDifferentSender || idx==0 ? (!msg.isOwn? (receiverProfilePic?        
                                        <img src={receiverProfilePic} alt="pfp" className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"/>
                                       :
@@ -172,6 +182,7 @@ const ChatSectionPage= ({ refreshChats, chatId ,receiverId, receiverName, receiv
                               </p>
                             </div>
                           
+                          </div>
                           </div>
                       );
                     })}
