@@ -43,11 +43,13 @@ const ChatPage = () => {
   }, []);
 
   const refreshChats = async () => {
+    setLoading(true);
     try {
       const chatRes = await axios.get(`${BASE_URL}/api/chats/mychats`, {
         withCredentials: true,
       });
       const chats = chatRes.data || [];
+      setLoading(false);
       setChatList(chats);
 
       const followRes = await axios.get(`${BASE_URL}/api/users/following`, {
