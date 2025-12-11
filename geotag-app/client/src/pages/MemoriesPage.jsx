@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import MemoryCard from "../components/Memories/MemoryCard";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
 import Navbar from "../components/Layout/Navbar";
+import BareHomePage from './BarebonesPages/BareProfilePage';
 import { useTheme } from "../context/ThemeContext";
 import animationData from "../data/animationData/emptyAnimation.json";
 import Lottie from "lottie-react";
@@ -24,6 +25,7 @@ const MemoriesPage = () => {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(true);
   const [address, setAddress] = useState("");
   const [profilePic, setProfilePic] = useState("");
   const [addrLoading, setAddrLoading] = useState(false);
@@ -66,6 +68,9 @@ const MemoriesPage = () => {
       } catch (err) {
         console.error("Failed to fetch memories:", err);
       }
+      finally {
+        setLoading(false);
+      }
     };
 
     fetchMemories();
@@ -84,6 +89,7 @@ const MemoriesPage = () => {
     } catch (err) {
       console.error("Delete memory failed:", err);
     }
+    
   };
 
   // Edit memory
@@ -204,6 +210,11 @@ const MemoriesPage = () => {
 
   fetchFollowCounts();
 }, [id]);
+
+if (!id || loading) {
+     return <BareHomePage />;
+
+  }
 
 
 
