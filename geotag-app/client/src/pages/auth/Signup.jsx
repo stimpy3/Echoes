@@ -186,7 +186,7 @@ That’s why the Google button sometimes disappears.  thats why the setTimeout*/
       { withCredentials: true } // needed for cookies
     );
 
-    console.log("Google login success:", res.data);
+    // console.log("Google login success:", res.data);
 
     if (res.data.isNewUser) {
       navigate("/homelocation"); // redirect new users

@@ -131,13 +131,26 @@ app.use("/api/follow", followRequestRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/messages", messageRoutes);
 
-//When a request comes in, Express checks the path.
-//If the path starts with /api/auth, it forwards the request to the authRoutes router.
-//router.post('/signup', ...) Defines a POST endpoint at /signup (full URL becomes /api/auth/signup after app.use).
 
-//------------------------
-// start server
-app.listen(process.env.PORT || 5000, () => console.log('Server running'));
+//app = normal server
+// io = real-time server
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true
+  }
+});
+
+/*require("./socket/index") returns a function 
+(because in your socket/index.js you did module.exports = (io) => { ... })
+By adding (io), you immediately call that function and pass io to it*/
+require("./socket/index")(io);
+
+server.listen(process.env.PORT || 5000, () => {
+  console.log("Server running");
+});
 /*app.listen(5000, ...)→ Starts the server on port 5000
 () => { ... } → This is a callback function that runs once the server starts successfully.
 

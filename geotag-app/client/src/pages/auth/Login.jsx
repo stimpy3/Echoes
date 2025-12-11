@@ -130,7 +130,7 @@ useEffect(() => {
       { withCredentials: true } // very important! for cookies
     );
 
-    console.log("Google login success:", res.data);
+    // console.log("Google login success:", res.data);
 
     if (res.data.isNewUser) {
       navigate("/homelocation"); // redirect new users

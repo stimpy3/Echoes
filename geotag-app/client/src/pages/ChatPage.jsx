@@ -2,6 +2,7 @@ import { ChevronLeft, Search, MessageSquareDot } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { formatTime } from "../utils/formatTime";
+import { socket } from "../utils/socket";
 import ChatSectionPage from "./ChatSectionPage";
 import BareBonesChatPage from "./BarebonesPages/BareBonesChatPage";
 import msgPlane from "../data/animationData/msgPlane.json";
@@ -103,7 +104,28 @@ const ChatPage = () => {
 
   useEffect(() => {
     if (!myId) return;
+
+    // Prevent duplicate connections. If not connected, set auth and connect.
+    if (!socket.connected) {
+      socket.auth = { userId: myId };
+      socket.connect();
+    } else if (socket.auth?.userId !== myId) {
+      // If already connected with different auth, reconnect with correct id
+      socket.disconnect();
+      socket.auth = { userId: myId };
+      socket.connect();
+    }
+
+    const handleConnect = () => //console.log("Socket connected (client):", socket.id);
+    socket.on("connect", handleConnect);
+
     refreshChats();
+
+    return () => {
+       socket.off("connect", handleConnect);
+       //DON'T disconnect on unmount - keep socket alive
+       // Socket stays connected for the entire app session
+     };
   }, [myId]);
 
   // clicking "Message" button from another page
@@ -267,6 +289,7 @@ const ChatPage = () => {
           receiverId={currentChatUser.id}
           receiverName={currentChatUser.name}
           receiverProfilePic={currentChatUser.profilePic}
+          myId={myId}
         />
       ) : (
         <section className="w-full bg-[url('/doodleBackgroundWhite.png')] dark:bg-[url('/doodleBackgroundDark.png')] h-full flex flex-col items-center justify-center">
