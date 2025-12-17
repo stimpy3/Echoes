@@ -116,7 +116,7 @@ input,textarea{
 }
 
 .dark .scrollbar-custom::-webkit-scrollbar-thumb {
-  background-color: #4b5563; /* dark mode thumb */
+  background-color: #464646ff; /* dark mode thumb */
 }
 /* -------------------------------------------------------------------------------------------------------- */
 

@@ -1,4 +1,4 @@
-import { Locate } from "lucide-react";
+import { Locate,Layers2,X } from "lucide-react";
 import React, { useState,useEffect } from "react";
 import MapView from "../components/Map/MapView";
 
@@ -7,16 +7,21 @@ import GradientText from "../components/Layout/GradientText";
 import { useTheme } from "../context/ThemeContext";
 import { useHome } from "../context/HomeContext";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
+import { shortenText } from "../utils/textShorten";
+import { useNavigate } from 'react-router-dom';
+
 import axios from "axios";
 
 const HomePage = () => {
   const { dark } = useTheme();
   const { homePosition, loading } = useHome();
-
+    const navigate = useNavigate();
   const [addingMode, setAddingMode] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [followList, setFollowList] = useState(false);
   const [memories, setMemories] = useState([]);
+  const [following, setFollowing] = useState([]);
 
   const handleMapClick = (latlng) => {
     if (!addingMode) return;
@@ -28,6 +33,22 @@ const HomePage = () => {
   const handleFormClose = () => {
     setShowForm(false);
     setSelectedPosition(null);
+  };
+
+  const toggleFollowingList =async () => {
+    setFollowList(prev=>!prev);
+    // setLoading(true); // start loading
+      try {
+        const res = await axios.get(`${BASE_URL}/api/users/following`, {
+          withCredentials: true,
+        });
+        setFollowing(res.data || []);
+      } catch (err) {
+        console.error("Error fetching following list:", err);
+      } finally {
+        // setLoading(false); // stop loading
+      }
+
   };
 
   //Resets map view to current home position
@@ -44,7 +65,7 @@ const HomePage = () => {
    const fetchMemories=async()=>{
     try{
         const res= await axios.get(`${BASE_URL}/api/memory/fetchmemory`, {withCredentials: true // crucial for sending cookies
-});
+   });
         setMemories([...memories, ...(res.data.memories || [])]);
     }
     catch(err){
@@ -127,29 +148,148 @@ const HomePage = () => {
                { enableHighAccuracy: true, timeout: 10000 }
              );
            }}
-           className="absolute w-[60px] aspect-square bottom-[90px] left-[20px] bg-dlightMain2 text-dtxt text-[2rem] grid place-content-center rounded-full shadow-md hover:bg-dlightMain2 transition-all z-[1000]"
+           className="absolute w-[50px] aspect-square bottom-[20px] left-[80px] bg-dborderColor text-dtxt text-[2rem] grid place-content-center rounded-full shadow-md hover:bg-dlightMain2 transition-all z-[1000]"
            title="Add memory at your current location"
          >
            <Locate />
          </button>
        )}
 
-        {/* 🔹 Add / Cancel Button */}
-        <button
-          onClick={() => {
-            setAddingMode((prev) => !prev);
-            setSelectedPosition(null);
-          }}
-          className={`w-[60px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full bottom-[20px] left-[20px] absolute z-[1000] transition-all ${
-            addingMode
-              ? "bg-dlightMain2 text-white"
-              : "bg-dmain text-dtxt dark:bg-main dark:text-txt"
-          }`}
-          title={addingMode ? "Cancel adding memory" : "Add new memory"}
-        >
-          +
-        </button>
+        <div className="w-fit h-fit flex-col bottom-[20px] left-[20px] absolute z-[1000] "> 
+           
+             {/* 🔹 Overlay Button */}
+           <button onClick={toggleFollowingList} className=" text-dtxt bg-dlightMain border-[1px] dark:border-dborderColor border-borderColor mb-[10px] dark:text-dtxt w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full">
+              <Layers2 />
+           </button>
+           
+           {/* 🔹 Add / Cancel Button */}
+           <button
+             onClick={() => {
+               setAddingMode((prev) => !prev);
+               setSelectedPosition(null);
+             }}
+             className={`w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full transition-all ${
+               addingMode
+                 ? "bg-red-500 rotate-45 text-white"
+                 : "bg-main text-txt"
+             }`}
+             title={addingMode ? "Cancel adding memory" : "Add new memory"}
+           >
+             +
+           </button>
+        </div> 
 
+        {(followList)?
+        <div className="absolute z-[1000] left-[80px] bottom-[80px] w-[200px] h-fit rounded-md overflow-hidden dark:bg-dlightMain bg-lightMain border-[1px] border-borderColor dark:border-dborderColor">
+          <section className="w-full dark:bg-dmain bg-main  text-center h-[40px] flex items-center justify-center border-b-[1px] border-borderColor dark:border-dborderColor">
+             <p className="text-[1.1rem] font-semibold text-transparent bg-clip-text bg-gradient-main ">Friend's Pins</p>
+             <button onClick={toggleFollowingList} className="absolute right-1 scale-[0.8]"><X/></button>
+          </section>
+
+         {following.length === 0 ? (
+  <section className="w-full h-fit text-center">
+    <p className="h-fit px-2 py-2">
+      Follow people to see their pins
+    </p>
+  </section>
+     ) : (
+  <section className="w-full h-[122px] overflow-y-auto scrollbar-custom">
+   {following.map((people) => ( 
+  <div 
+    key={people._id} 
+    className="w-full h-fit flex items-center dark:hover:bg-dlightMain2 hover:bg-main bg-lightMain dark:bg-dlightMain border-b-[1px] border-borderColor dark:border-dborderColor cursor-pointer" 
+    onClick={() => {
+      const checkbox = document.getElementById(`chk-${people._id}`);
+      if (checkbox) checkbox.click();
+    }}
+    onDoubleClick={() => navigate(`/profile/${people._id}`)} 
+  > 
+    <div className="w-fit h-fit px-2 flex items-center"> 
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        onDoubleClick={(e) => e.stopPropagation()} 
+        className="mr-3" 
+      > 
+        <label 
+          htmlFor={`chk-${people._id}`} 
+          className=" 
+            w-4 h-4 rounded 
+            border border-borderColor dark:border-dborderColor
+            bg-white dark:bg-black 
+            flex items-center justify-center 
+            cursor-pointer 
+            relative 
+          " 
+        > 
+          <input 
+            type="checkbox" 
+            id={`chk-${people._id}`} 
+            className="absolute opacity-0 peer" 
+          /> 
+          <svg 
+            className=" 
+              w-3 h-3 
+              text-black dark:text-white 
+              hidden peer-checked:block 
+            " 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="3" 
+            viewBox="0 0 24 24" 
+          > 
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              d="M5 13l4 4L19 7" 
+            /> 
+          </svg> 
+        </label> 
+      </div> 
+      {people.profilePic ? ( 
+        <img 
+          src={people.profilePic} 
+          className="w-6 h-6 mr-2 rounded-full border-1 border-main dark:border-dmain object-cover" 
+        /> 
+      ) : ( 
+        <div className="w-6 h-6 mr-2 rounded-full bg-gray-300 flex items-end justify-center overflow-hidden"> 
+          <i className="fa-solid fa-user text-[1rem] text-gray-500"></i> 
+        </div> 
+      )} 
+
+      <div className="flex flex-col py-2 text-left"> 
+        <span className="text-txt dark:text-dtxt font-semibold"> 
+          {shortenText(people.name,12)} 
+        </span> 
+      </div> 
+    </div> 
+  </div> 
+))}
+  </section>
+   )}
+   {following.length !== 0 ? (
+   <section className="w-full h-[45px] flex gap-2 items-center p-2">
+       <button 
+         className="bg-dmain h-full text-dtxt dark:bg-main rounded-sm dark:text-txt w-full"
+         onClick={() => {
+           following.forEach((people) => {
+             const checkbox = document.getElementById(`chk-${people._id}`);
+             if (checkbox && checkbox.checked) {
+               checkbox.checked = false;
+             }
+           });
+         }}
+       >
+         Clear
+       </button>
+       <button className="bg-gradient-main rounded-sm text-dtxt h-full w-full">Apply</button>
+   </section>)
+   :
+   <></>
+   }
+        </div>
+        :
+        <></>
+        }
         {/* 🔹 Bottom gradient */}
         <div className="gradientContainerBottom absolute z-[900] h-[50px] bg-[linear-gradient(to_top,theme(colors.fadeColor)_0%,transparent_100%)] 
           dark:bg-[linear-gradient(to_top,theme(colors.dfadeColor)_0%,transparent_100%)] bottom-0 w-full" />

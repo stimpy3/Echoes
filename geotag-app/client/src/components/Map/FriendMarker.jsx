@@ -4,7 +4,7 @@ import {MapPin} from 'lucide-react';
 import L from "leaflet";
 import 'leaflet/dist/leaflet.css';
 
-const CustomMarker = ({ memory }) => {
+const FriendMarker = ({ memory }) => {
   const customIcon = L.divIcon({
     className: "", // removes default leaflet marker styles
     html: `
@@ -13,6 +13,7 @@ const CustomMarker = ({ memory }) => {
       style="background-image: url('${memory.photoUrl}')">
       </div>
       <div class="z-10 absolute left-1/2 -translate-x-1/2 bottom-0 w-3 rotate-45 aspect-square bg-dmain dark:bg-main"></div>
+      <div class="z-20 absolute w-8 right-0 bottom-0 aspect-square rounded-full bg-red-500"></div>
     </div>
     `,
     iconSize: [64, 64],
@@ -48,4 +49,4 @@ const CustomMarker = ({ memory }) => {
   );
 };
 
-export default CustomMarker;
+export default FriendMarker;

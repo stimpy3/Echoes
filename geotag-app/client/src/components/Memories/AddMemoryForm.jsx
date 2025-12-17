@@ -129,7 +129,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
 
   return (
     <div className="fixed z-[999] inset-0 backdrop-blur-[10px] bg-dborderColor/50 flex items-center justify-center p-4">
-      <div className="rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-hidden">
+      <div className="rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-custom overflow-hidden">
         <div className="p-6 bg-main dark:bg-dlightMain">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-txt dark:text-dtxt">
@@ -208,7 +208,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
               <button
                 type="button"
                 onClick={fetchAddress}
-                className="px-3 py-2 min-w-fit whitespace-nowrap flex text-[1rem] font-bold bg-gray-200 rounded-lg hover:bg-gray-300 text-sm"
+                className="px-3 py-2 min-w-fit whitespace-nowrap flex text-[1rem] font-bold bg-gradient-main rounded-lg hover:bg-gray-300 text-sm"
               >
                 <Sparkles />&nbsp;Auto
               </button>
@@ -249,7 +249,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 bg-gray-200 text-txt dark:text-txt py-3 rounded-lg font-medium hover:bg-gray-300 transition"
+                className="flex-1 bg-dmain text-dtxt py-3 rounded-lg font-medium hover:bg-main hover:text-txt transition"
               >
                 Cancel
               </button>

@@ -16,10 +16,10 @@ const ChatSectionPage = ({
   const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
 
   const [messages, setMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);  // ✅ Track if other user is typing
+  const [isTyping, setIsTyping] = useState(false);  // Track if other user is typing
   const textareaRef = useRef();
   const messagesContainerRef = useRef(null);
-  const typingTimeoutRef = useRef(null);  // ✅ For debouncing
+  const typingTimeoutRef = useRef(null);  // For debouncing
   const navigate = useNavigate();
 
   const handleInput = (e) => {
