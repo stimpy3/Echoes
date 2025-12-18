@@ -72,7 +72,7 @@ const MemoryCard = ({ memory, onDelete, onEdit }) => {
         <img
           src={memory.photoUrl}
           alt={memory.title}
-          onClick={() => !showDetails && setShowImageModal(true)} // 🆕 open modal only when details hidden
+          onClick={() => !showDetails && setShowImageModal(true)} // open modal only when details hidden
           className={`w-full h-full object-cover cursor-pointer transition-all duration-500 ${
             showDetails ? 'opacity-40 blur-sm' : 'opacity-100 blur-0'
           }`}

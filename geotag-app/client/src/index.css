@@ -103,11 +103,11 @@ input,textarea{
 }
 
 .scrollbar-custom::-webkit-scrollbar-track {
-  background-color: #c1c1c1ff; /* light mode track */
+  background-color: #eeeeeeff; /* light mode track */
 }
 
 .scrollbar-custom::-webkit-scrollbar-thumb {
-  background-color: #949494ff;  /* light mode thumb */
+  background-color: #d4d4d4ff;  /* light mode thumb */
   border-radius: 4px;
 }
 

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from "axios";
 
 const HomePage = () => {
+  const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
   const { dark } = useTheme();
   const { homePosition, loading } = useHome();
     const navigate = useNavigate();
@@ -21,7 +22,10 @@ const HomePage = () => {
   const [showForm, setShowForm] = useState(false);
   const [followList, setFollowList] = useState(false);
   const [memories, setMemories] = useState([]);
+  const [friendMemories,setFriendMemories] = useState([]);
   const [following, setFollowing] = useState([]);
+  const [activePinPeople, setActivePinPeople] = useState([]);
+  const [applyLoading, setApplyLoading] = useState(false);
 
   const handleMapClick = (latlng) => {
     if (!addingMode) return;
@@ -35,21 +39,42 @@ const HomePage = () => {
     setSelectedPosition(null);
   };
 
-  const toggleFollowingList =async () => {
-    setFollowList(prev=>!prev);
-    // setLoading(true); // start loading
-      try {
-        const res = await axios.get(`${BASE_URL}/api/users/following`, {
-          withCredentials: true,
-        });
-        setFollowing(res.data || []);
-      } catch (err) {
-        console.error("Error fetching following list:", err);
-      } finally {
-        // setLoading(false); // stop loading
-      }
+const toggleFollowingList = () => {
+  setFollowList(prev => !prev);
+};
 
-  };
+const fetchFollowing = async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/api/users/following`, {
+      withCredentials: true,
+    });
+    setFollowing(res.data || []);
+  } catch (err) {
+    console.error("Error fetching following list:", err);
+  }
+};
+
+
+
+ const applyFilter = async () => {
+  setApplyLoading(true);
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/api/memory/friendMemory`,
+      { userIds: activePinPeople },
+      { withCredentials: true }
+    );
+
+    setFriendMemories(res.data);
+
+  } catch (err) {
+    console.error("Error applying filter:", err);
+  }
+  setApplyLoading(false);
+  toggleFollowingList();
+};
+
+
 
   //Resets map view to current home position
   const resetToAutoLocation = () => {
@@ -58,7 +83,6 @@ const HomePage = () => {
     alert("Reset to your current home location!");
   };
 
-  const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
   
   //fetch memories on mount
   useEffect(()=>{
@@ -91,6 +115,7 @@ const HomePage = () => {
         {/* 🔹 Map */}
         {!loading && (
           <MapView
+            friendMemories={friendMemories}
             memories={memories}
             homePosition={homePosition}
             addingMode={addingMode}
@@ -158,7 +183,7 @@ const HomePage = () => {
         <div className="w-fit h-fit flex-col bottom-[20px] left-[20px] absolute z-[1000] "> 
            
              {/* 🔹 Overlay Button */}
-           <button onClick={toggleFollowingList} className=" text-dtxt bg-dlightMain border-[1px] dark:border-dborderColor border-borderColor mb-[10px] dark:text-dtxt w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full">
+           <button onClick={()=>{toggleFollowingList();fetchFollowing();}} className=" text-dtxt bg-dlightMain border-[1px] dark:border-dborderColor border-borderColor mb-[10px] dark:text-dtxt w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full">
               <Layers2 />
            </button>
            
@@ -193,7 +218,7 @@ const HomePage = () => {
     </p>
   </section>
      ) : (
-  <section className="w-full h-[122px] overflow-y-auto scrollbar-custom">
+  <section className="w-full min-h-fit max-h-[122px] overflow-y-auto scrollbar-custom">
    {following.map((people) => ( 
   <div 
     key={people._id} 
@@ -224,7 +249,17 @@ const HomePage = () => {
           <input 
             type="checkbox" 
             id={`chk-${people._id}`} 
-            className="absolute opacity-0 peer" 
+            className="absolute opacity-0 peer"
+            checked={activePinPeople.includes(people._id)} //to remember who is already checked
+            onChange={(e) => {
+              if (e.target.checked) {
+                setActivePinPeople(prev => [...prev, people._id]);
+              } else {
+                setActivePinPeople(prev =>
+                  prev.filter(id => id !== people._id)
+                );
+              }
+            }} 
           /> 
           <svg 
             className=" 
@@ -277,11 +312,18 @@ const HomePage = () => {
                checkbox.checked = false;
              }
            });
+           setActivePinPeople([]);
          }}
        >
          Clear
        </button>
-       <button className="bg-gradient-main rounded-sm text-dtxt h-full w-full">Apply</button>
+       <button onClick={applyFilter} className="bg-gradient-main rounded-sm text-dtxt h-full w-full">
+         {applyLoading?
+         <p>Applying...</p>
+         :
+         <p>Apply</p>
+         }
+        </button>
    </section>)
    :
    <></>

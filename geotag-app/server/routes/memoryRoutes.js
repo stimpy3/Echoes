@@ -42,6 +42,10 @@ router.get('/fetchmemory',verifyToken,async(req,res)=>{
     }
 });
 
+
+
+
+
 //this one is to get memories of a specific user for ProfilePage
 router.get('/user/:id', async (req, res) => {
   try {
@@ -87,6 +91,95 @@ router.delete('/deletememory/:id',verifyToken,async(req,res)=>{
         res.status(500).json({message:'server failed to delete memory' });
     }
 });
+
+
+
+
+
+router.post('/friendMemory', verifyToken, async (req, res) => {
+  try {
+    const mongoose = require("mongoose");
+
+    const { userIds } = req.body;
+
+    // Safety check
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.json([]);
+    }
+
+    // Convert string IDs → ObjectIds
+    const objectIds = userIds.map(
+      id => new mongoose.Types.ObjectId(id)
+    );
+
+    const result = await Memory.aggregate([
+      // 1. Only memories from selected users
+      {
+        $match: {
+          userId: { $in: objectIds }
+        }
+      },
+
+      // 2. Join with users collection
+      {
+        $lookup: {
+          from: "users",          // collection name (plural!)
+          localField: "userId",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+
+      // 3. Flatten user array
+      {
+        $unwind: "$user"
+      },
+
+      // 4. Group by user
+      {
+        $group: {
+          _id: "$userId",
+          user: {
+            $first: {
+              name: "$user.name",
+              profilePic: "$user.profilePic"
+            }
+          },
+          memories: {
+            $push: {
+              _id: "$_id",
+              title: "$title",
+              description: "$description",
+              category: "$category",
+              location: "$location",
+              photoUrl: "$photoUrl",
+              createdAt: "$createdAt"
+            }
+          }
+        }
+      },
+
+      // 5. Clean final shape
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          user: 1,
+          memories: 1
+        }
+      }
+    ]);
+
+    res.status(200).json(result);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: 'server failed to fetch friend memories'
+    });
+  }
+});
+
 
 module.exports=router;
  

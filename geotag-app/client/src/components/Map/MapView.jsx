@@ -2,12 +2,13 @@ import { MapContainer, TileLayer, ZoomControl, useMap, useMapEvents } from "reac
 import "leaflet/dist/leaflet.css";
 import { useTheme } from "../../context/ThemeContext";
 import CustomMarker from "./CustomMarker";
+import FriendMarker from "./FriendMarker";
 import HomeMarker from "./HomeMarker";
 import { useHome } from "../../context/HomeContext";
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 
-const MapView = ({ memories, addingMode = false, onMapClick }) => {
+const MapView = ({friendMemories, memories, addingMode = false, onMapClick }) => {
   const defaultCenter = [19.0866, 72.9095];
   const defaultZoom = 5;
   const { dark } = useTheme();
@@ -63,6 +64,35 @@ const MapView = ({ memories, addingMode = false, onMapClick }) => {
         {memories.map((memory) => (
           <CustomMarker key={memory.id} memory={memory} />
         ))}
+
+        {/*Render all friend memories 
+          receiving:
+           
+           [
+             {
+               userId: "65a1...",
+               user: {
+                 name: "Alex",
+                 profilePic: "https://..."
+               },
+               memories: [
+                 { title: "...", photoUrl: "..." },
+                 { title: "...", photoUrl: "..." }
+               ]
+             }
+           ]
+           
+           */}
+            {friendMemories.map((people) =>
+              people.memories.map((memory) => (
+                <FriendMarker
+                  key={memory.userId}
+                  pfp={people.user.profilePic}
+                  id={people.userId}
+                  memory={memory}
+                />
+              ))
+            )}
 
         {/* 🔹 Add this — only active in add mode */}
         <ClickHandler />

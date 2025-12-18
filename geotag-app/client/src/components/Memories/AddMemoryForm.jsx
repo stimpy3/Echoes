@@ -156,7 +156,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={handleChange}
                 required
                 placeholder="Beach Sunset"
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
@@ -172,7 +172,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 required
                 rows="4"
                 placeholder="Describe your memory..."
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
@@ -188,7 +188,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={handleChange}
                 required
                 placeholder="https://example.com/photo.jpg"
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 For now, use image URLs. We'll add file upload later!
@@ -203,14 +203,14 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 value={formData.address}
                 onChange={handleChange}
                 placeholder="Santa Monica Beach, CA"
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <button
                 type="button"
                 onClick={fetchAddress}
-                className="px-3 py-2 min-w-fit whitespace-nowrap flex text-[1rem] font-bold bg-gradient-main rounded-lg hover:bg-gray-300 text-sm"
+                className="px-3 py-2 min-w-fit whitespace-nowrap flex text-dtxt text-[1rem] font-bold bg-gradient-main rounded-lg hover:bg-gray-300 text-sm"
               >
-                <Sparkles />&nbsp;Auto
+                <Sparkles />&nbsp;<p className="flex items-center text-[1.1rem] font-normal ">Auto</p>
               </button>
             </div>
 
@@ -230,7 +230,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={(e) =>
                   setFormData({ ...formData, latitude: e.target.value })
                 }
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
               />
               <input
                 type="number"
@@ -240,7 +240,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={(e) =>
                   setFormData({ ...formData, longitude: e.target.value })
                 }
-                className="bg-lightMain dark:bg-dlightMain w-full px-4 py-2 border-[2px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
               />
             </div>
 
