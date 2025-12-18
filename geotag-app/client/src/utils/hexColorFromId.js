@@ -16,7 +16,7 @@ export function getHexFromUserId(userId) {
   }
 
   const saturation = 90; // high for neon
-  const lightness = 55;  // medium-high to pop
+  const lightness = 85;  // medium-high to pop
 
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }

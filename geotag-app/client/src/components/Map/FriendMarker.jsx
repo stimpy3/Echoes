@@ -10,12 +10,9 @@ const FriendMarker = ({ pfp,id,memory }) => {
     className: "", // removes default leaflet marker styles
     html: `
      <div class="w-[52px] h-[52px] relative hover:scale-[1.5] transition-all duration-200">
-       <div class="relative z-20 w-12 h-12 rounded-[10px] border-[2px] dark:border-lightMain bg-cover bg-center"
+       <div class="relative z-20 w-12 h-12 rounded-[10px] border-[2px] bg-gray-500 dark:border-lightMain bg-cover bg-center"
       style="background-image: url('${memory.photoUrl}');
              border-color: ${getHexFromUserId(id)};">
-      </div>
-      <div class="z-10 absolute left-1/2 -translate-x-1/2 bottom-0 shadow-md w-3 rotate-45 aspect-square"
-      style= "background: ${getHexFromUserId(id)};">
       </div>
       <div class="z-20 absolute w-7 right-0 bottom-0 aspect-square rounded-full shadow-md bg-contain"
       style="background-image: url('${pfp}')"></div>

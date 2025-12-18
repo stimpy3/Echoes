@@ -9,7 +9,7 @@ const CustomMarker = ({ memory }) => {
     className: "", // removes default leaflet marker styles
     html: `
     <div class="w-[70px] h-[70px] relative hover:scale-[1.5] transition-all duration-200">
-       <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain dark:border-main  bg-cover bg-center"
+       <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain bg-gray-500 dark:border-main  bg-cover bg-center"
          style="background-image: url('${memory.photoUrl}')">
       </div>
       <div class="z-10 absolute right-[50%] translate-x-[20%] shadow-md bottom-0 w-3 rotate-45 aspect-square bg-dmain dark:bg-main"></div>
