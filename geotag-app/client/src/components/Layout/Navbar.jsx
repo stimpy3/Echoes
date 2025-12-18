@@ -199,11 +199,12 @@ const handleDeleteNotif = async (notifId) => {
 
 
   return (
-       <nav className="transparent backdrop-blur-lg fixed z-[999] top-[0px] py-[5px] left-0 right-0 px-[20px]">
+       <nav className="transparent bg-[linear-gradient(to_bottom,theme(colors.fadeColor)_10%,transparent_100%)] 
+          dark:bg-[linear-gradient(to_bottom,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[999] top-[0px] py-[5px] left-0 right-0 px-[20px]">
         <div className="flex justify-between items-center h-[50px] relative z-10">
           {/* Logo/Brand */}
           <Link to="/home" className="flex items-center space-x-2">
-            <div className='bg-[url("/logo.png")] bg-contain bg-no-repeat aspect-[445/549] h-[40px]'></div>
+            <div className='bg-[url("/logo.png")] bg-contain bg-no-repeat aspect-[445/549] h-[35px]'></div>
           </Link>
 
           {/* Navigation Links */}

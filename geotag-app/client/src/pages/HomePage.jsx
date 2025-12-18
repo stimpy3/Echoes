@@ -218,7 +218,7 @@ const fetchFollowing = async () => {
     </p>
   </section>
      ) : (
-  <section className="w-full min-h-fit max-h-[122px] overflow-y-auto scrollbar-custom">
+  <section className="w-full h-fit max-h-[122px] overflow-y-auto scrollbar-custom">
    {following.map((people) => ( 
   <div 
     key={people._id} 
@@ -306,13 +306,13 @@ const fetchFollowing = async () => {
        <button 
          className="bg-dmain h-full text-dtxt dark:bg-main rounded-sm dark:text-txt w-full"
          onClick={() => {
+           setActivePinPeople([]);
            following.forEach((people) => {
              const checkbox = document.getElementById(`chk-${people._id}`);
              if (checkbox && checkbox.checked) {
                checkbox.checked = false;
              }
            });
-           setActivePinPeople([]);
          }}
        >
          Clear
