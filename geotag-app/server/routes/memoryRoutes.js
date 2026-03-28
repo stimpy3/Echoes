@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Memory = require('../models/memories');
 const verifyToken = require('../middleware/verifyToken');
-const { upload } = require('../middleware/cloudinaryConfig');
+const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
+const { generateEmbedding } = require('../utils/embeddingHelper');
 
 router.post('/creatememory', verifyToken, upload.single('photo'), async (req, res) => {
     try {
@@ -26,6 +27,10 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
             return res.status(400).json({ message: 'Invalid location data' });
         }
 
+        // Generate embedding from title + description
+        const textToEmbed = `${title} ${description}`;
+        const embedding = await generateEmbedding(textToEmbed);
+
         const newMemory = new Memory({
             userId: userId,
             title: title,
@@ -35,7 +40,8 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
                 coordinates: parsedLocation.coordinates, // [lng, lat]
                 address: parsedLocation.address
             },
-            photoUrl: photoUrl
+            photoUrl: photoUrl,
+            embedding: embedding // Save the embedding
         });
 
         const savedMemory = await newMemory.save();
@@ -81,8 +87,30 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
 
         const updateData = { title, description };
 
+        // If title or description is updated, regenerate embedding
+        if (title || description) {
+            // We need the existing memory values if one is missing in the request
+            // For simplicity, we just use what's provided or skip if both are missing
+            const textToEmbed = `${title || ""} ${description || ""}`.trim();
+            if (textToEmbed) {
+                updateData.embedding = await generateEmbedding(textToEmbed);
+            }
+        }
+
         // If a new photo is uploaded, update the photoUrl
         if (req.file) {
+            // Cleanup: Try to delete the old image from Cloudinary to free space
+            try {
+                const oldMemory = await Memory.findOne({ _id: memoryId, userId: req.userId });
+                if (oldMemory && oldMemory.photoUrl && oldMemory.photoUrl.includes('cloudinary')) {
+                    const urlParts = oldMemory.photoUrl.split('/');
+                    const fileNameWithExt = urlParts[urlParts.length - 1];
+                    const publicId = `memories/${fileNameWithExt.split('.')[0]}`;
+                    await cloudinary.uploader.destroy(publicId);
+                }
+            } catch (err) {
+                console.error("Failed to delete old image from Cloudinary:", err);
+            }
             updateData.photoUrl = req.file.path;
         }
 
@@ -104,13 +132,32 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
     }
 });
 
-router.delete('/deletememory/:id',verifyToken,async(req,res)=>{
-    try{
-        const memoryId=req.params.id;
-        await Memory.deleteOne({_id:memoryId,userId:req.userId});
-    }
-    catch(err){
-        res.status(500).json({message:'server failed to delete memory' });
+router.delete('/deletememory/:id', verifyToken, async (req, res) => {
+    try {
+        const memoryId = req.params.id;
+        const memory = await Memory.findOne({ _id: memoryId, userId: req.userId });
+
+        if (!memory) {
+            return res.status(404).json({ message: 'Memory not found or not authorized' });
+        }
+
+        // If it's a Cloudinary image, delete it to free space
+        if (memory.photoUrl && memory.photoUrl.includes('cloudinary')) {
+            try {
+                const urlParts = memory.photoUrl.split('/');
+                const fileNameWithExt = urlParts[urlParts.length - 1];
+                const publicId = `memories/${fileNameWithExt.split('.')[0]}`;
+                await cloudinary.uploader.destroy(publicId);
+            } catch (err) {
+                console.error("Cloudinary image deletion failed:", err);
+            }
+        }
+
+        await Memory.deleteOne({ _id: memoryId, userId: req.userId });
+        res.status(200).json({ message: 'Memory and image deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server failed to delete memory' });
     }
 });
 

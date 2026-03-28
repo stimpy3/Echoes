@@ -17,6 +17,7 @@ const memorySchema=new mongoose.Schema({
     address: { type: String, required: true }
   },
   photoUrl: { type: String, required: true },
+  embedding: { type: [Number], select: false }, // Store embeddings but don't select by default
   createdAt: { type: Date, default: Date.now }
 });
 
