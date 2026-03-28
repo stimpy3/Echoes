@@ -281,6 +281,7 @@ if (!id || loading) {
             <MemoryCard
               key={memory._id}
               memory={memory}
+              currentUserId={id}
               onDelete={handleDeleteMemory}
               onEdit={handleEditMemory}
             />

@@ -9,6 +9,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import ChatPage from "./pages/ChatPage";
 import AuthPage from './pages/auth/AuthPage';
 import ProfilePage from "./pages/ProfilePage";
+import ExplorePage from './pages/ExplorePage';
 import { ThemeProvider } from "./context/ThemeContext";
 import { HomeProvider } from "./context/HomeContext";
 
@@ -26,6 +27,7 @@ function App() {
           <Route path="/following" element={<FollowingListPage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/timeline" element={<TimelinePage />} />
+          <Route path="/explore" element={<ExplorePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/" element={<AuthPage />} />

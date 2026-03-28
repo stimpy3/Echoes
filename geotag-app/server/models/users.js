@@ -26,7 +26,8 @@ const userSchema = new mongoose.Schema({
   home: {
     lat: { type: Number, default: null },
     lng: { type: Number, default: null }
-  }
+  },
+  isPrivate: { type: Boolean, default: false }
 });
 
 //#region to allow collapse

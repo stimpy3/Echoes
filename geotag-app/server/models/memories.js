@@ -18,6 +18,12 @@ const memorySchema=new mongoose.Schema({
   },
   photoUrl: { type: String, required: true },
   embedding: { type: [Number], select: false }, // Store embeddings but don't select by default
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  comments: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

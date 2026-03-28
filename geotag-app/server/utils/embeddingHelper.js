@@ -31,4 +31,38 @@ async function generateEmbedding(text) {
     }
 }
 
-module.exports = { generateEmbedding };
+/**
+ * Mathematically computes the mean of an array of 384-dimensional vectors.
+ * @param {number[][]} embeddings - Array of embedding arrays.
+ * @returns {number[]} - Averaged embedding vector.
+ */
+function averageEmbeddings(embeddings) {
+    if (!embeddings || embeddings.length === 0) return null;
+    
+    const length = embeddings[0].length;
+    const sumEmbedding = new Array(length).fill(0);
+    
+    for (const embedding of embeddings) {
+        for (let i = 0; i < length; i++) {
+            sumEmbedding[i] += embedding[i];
+        }
+    }
+    
+    // Mean
+    const average = sumEmbedding.map(val => val / embeddings.length);
+    
+    // Normalize logic
+    const magnitude = Math.sqrt(average.reduce((sum, val) => sum + val * val, 0));
+    if (magnitude === 0) return average;
+    
+    return average.map(val => val / magnitude);
+}
+
+// Pre-load the model immediately on server start so it's ready for the first request
+getExtractor().then(() => {
+    console.log("✅ AI Embedding Model loaded and ready!");
+}).catch(err => {
+    console.error("❌ Failed to pre-load embedding model:", err);
+});
+
+module.exports = { generateEmbedding, averageEmbeddings };

@@ -23,6 +23,7 @@ const ProfilePage = () => {
   const [followingCount, setFollowingCount] = useState(0);
   const [followState, setFollowState] = useState("none");
 // "none" | "requested" | "following"
+  const [currentUserId, setCurrentUserId] = useState("");
 
 
   // --- HOOKS ---
@@ -147,9 +148,20 @@ useEffect(() => {
   fetchFollowCounts();
 }, [id]);
 
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/api/user/navbar`, { withCredentials: true });
+        setCurrentUserId(res.data._id);
+      } catch (err) {
+        console.error("Error fetching current user:", err);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
+
   if (!user || loading) {
      return <BareHomePage />;
-
   }
 
   const handleOpenChat= async()=>{
@@ -288,7 +300,7 @@ useEffect(() => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[5px] min-h-[80vh] w-full mt-4">
               {memories.map((memory) => (
-                <MemoryCard key={memory._id} memory={memory} />
+                <MemoryCard key={memory._id} memory={memory} currentUserId={currentUserId} />
               ))}
             </div>
           )

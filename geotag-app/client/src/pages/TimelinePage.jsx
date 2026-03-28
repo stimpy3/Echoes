@@ -4,6 +4,7 @@ import Navbar from '../components/Layout/Navbar';
 import GlareHover from '../components/Layout/GlareHover';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import axios from "axios";
+import PostModal from '../components/Memories/PostModal';
 
 const TimelinePage = () => {
   const { dark } = useTheme();
@@ -12,6 +13,8 @@ const TimelinePage = () => {
   const [memories, setMemories] = useState([]);
   const carouselRefs = useRef([...Array(12)].map(() => React.createRef()));
   const monthRefs = useRef([...Array(12)].map(() => React.createRef()));
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [selectedMemoryId, setSelectedMemoryId] = useState(null);
   
   //State to track overflow for each month carousel
   const [hasOverflow, setHasOverflow] = useState(Array(12).fill(false));
@@ -72,9 +75,21 @@ const TimelinePage = () => {
     catch(err){
       console.error("Failed to fetch memories:",err);
     }
-   }
-   fetchMemories();
-  },[]);
+    }
+    fetchMemories();
+  }, []);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/api/user/navbar`, { withCredentials: true });
+        setCurrentUserId(res.data._id);
+      } catch (err) {
+        console.error("Error fetching current user:", err);
+      }
+    };
+    fetchUser();
+  }, []);
   
 
   return (
@@ -268,7 +283,8 @@ const TimelinePage = () => {
                               <img
                                 src={memory.photoUrl}
                                 alt={memory.title}
-                                className="w-full h-[85%] object-cover"
+                                className="w-full h-[85%] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => setSelectedMemoryId(memory._id)}
                               />
                             </article>
                           </GlareHover>
@@ -285,6 +301,14 @@ const TimelinePage = () => {
           ))}
         </section>
       </div>
+
+      {selectedMemoryId && (
+        <PostModal 
+          memoryId={selectedMemoryId} 
+          currentUserId={currentUserId} 
+          onClose={() => setSelectedMemoryId(null)} 
+        />
+      )}
     </div>
      
   );

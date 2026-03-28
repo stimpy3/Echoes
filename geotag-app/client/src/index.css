@@ -93,30 +93,35 @@ input,textarea{
 }
 
 /* Custom scrollbar container */
-.scrollbar-custom {
+.custom-scrollbar {
   overflow-y: auto;
 }
 
 /* Scrollbar width */
-.scrollbar-custom::-webkit-scrollbar {
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
-.scrollbar-custom::-webkit-scrollbar-track {
-  background-color: #eeeeeeff; /* light mode track */
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: transparent;
 }
 
-.scrollbar-custom::-webkit-scrollbar-thumb {
+.custom-scrollbar::-webkit-scrollbar-thumb {
   background-color: #d4d4d4ff;  /* light mode thumb */
   border-radius: 4px;
 }
 
-.dark .scrollbar-custom::-webkit-scrollbar-track {
-  background-color: #141414; /* dark mode track */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #464646ff; /* dark mode thumb */
 }
 
-.dark .scrollbar-custom::-webkit-scrollbar-thumb {
-  background-color: #464646ff; /* dark mode thumb */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
 }
 /* -------------------------------------------------------------------------------------------------------- */
 

@@ -27,10 +27,6 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
             return res.status(400).json({ message: 'Invalid location data' });
         }
 
-        // Generate embedding from title + description
-        const textToEmbed = `${title} ${description}`;
-        const embedding = await generateEmbedding(textToEmbed);
-
         const newMemory = new Memory({
             userId: userId,
             title: title,
@@ -40,12 +36,27 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
                 coordinates: parsedLocation.coordinates, // [lng, lat]
                 address: parsedLocation.address
             },
-            photoUrl: photoUrl,
-            embedding: embedding // Save the embedding
+            photoUrl: photoUrl
         });
 
         const savedMemory = await newMemory.save();
+        
+        // Respond to the user immediately for the fastest experience
         res.status(201).json({ memory: savedMemory });
+
+        // Generate embedding in the background
+        (async () => {
+            try {
+                const textToEmbed = `${title} ${description}`;
+                const embedding = await generateEmbedding(textToEmbed);
+                if (embedding) {
+                    await Memory.findByIdAndUpdate(savedMemory._id, { embedding });
+                    console.log(`✅ Background embedding completed for memory: ${savedMemory._id}`);
+                }
+            } catch (err) {
+                console.error("Background embedding failed:", err);
+            }
+        })();
     } catch (err) {
         console.error("Memory creation error:", err);
         res.status(500).json({ message: 'Server failed to create memory' });
@@ -87,16 +98,6 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
 
         const updateData = { title, description };
 
-        // If title or description is updated, regenerate embedding
-        if (title || description) {
-            // We need the existing memory values if one is missing in the request
-            // For simplicity, we just use what's provided or skip if both are missing
-            const textToEmbed = `${title || ""} ${description || ""}`.trim();
-            if (textToEmbed) {
-                updateData.embedding = await generateEmbedding(textToEmbed);
-            }
-        }
-
         // If a new photo is uploaded, update the photoUrl
         if (req.file) {
             // Cleanup: Try to delete the old image from Cloudinary to free space
@@ -114,7 +115,6 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
             updateData.photoUrl = req.file.path;
         }
 
-        // Update memory, only if it belongs to the user
         const updatedMemory = await Memory.findOneAndUpdate(
             { _id: memoryId, userId: req.userId },
             updateData,
@@ -125,7 +125,24 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
             return res.status(404).json({ message: 'Memory not found or not authorized' });
         }
 
+        // Respond to the user immediately
         res.status(200).json({ memory: updatedMemory });
+
+        // If title or description changed, regenerate embedding in background
+        if (title || description) {
+            (async () => {
+                try {
+                    const textToEmbed = `${title || updatedMemory.title} ${description || updatedMemory.description}`;
+                    const embedding = await generateEmbedding(textToEmbed);
+                    if (embedding) {
+                        await Memory.findByIdAndUpdate(memoryId, { embedding });
+                        console.log(`✅ Background embedding update completed for memory: ${memoryId}`);
+                    }
+                } catch (err) {
+                    console.error("Background embedding update failed:", err);
+                }
+            })();
+        }
     } catch (err) {
         console.error("Memory edit error:", err);
         res.status(500).json({ message: 'Server failed to update memory' });
@@ -249,6 +266,179 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
   }
 });
 
+// Like/Unlike memory
+router.post('/like/:id', verifyToken, async (req, res) => {
+    try {
+        const memoryId = req.params.id;
+        const userId = req.userId;
 
-module.exports=router;
- 
+        const memory = await Memory.findById(memoryId);
+        if (!memory) return res.status(404).json({ message: 'Memory not found' });
+
+        const likeIndex = memory.likes.indexOf(userId);
+        if (likeIndex === -1) {
+            memory.likes.push(userId);
+        } else {
+            memory.likes.splice(likeIndex, 1);
+        }
+
+        await memory.save();
+        res.status(200).json({ likes: memory.likes });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Add comment
+router.post('/comment/:id', verifyToken, async (req, res) => {
+    try {
+        const memoryId = req.params.id;
+        const { text } = req.body;
+        if (!text) return res.status(400).json({ message: 'Comment text is required' });
+
+        const memory = await Memory.findById(memoryId);
+        if (!memory) return res.status(404).json({ message: 'Memory not found' });
+
+        memory.comments.push({ userId: req.userId, text });
+        await memory.save();
+
+        const populatedMemory = await Memory.findById(memoryId)
+            .populate('comments.userId', 'name profilePic');
+        
+        const newComment = populatedMemory.comments[populatedMemory.comments.length - 1];
+        res.status(201).json(newComment);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error adding comment' });
+    }
+});
+
+// Fetch single memory with populated comments
+router.get('/single/:id', verifyToken, async (req, res) => {
+    try {
+        const memory = await Memory.findById(req.params.id)
+            .populate('userId', 'name profilePic')
+            .populate('comments.userId', 'name profilePic');
+        
+        if (!memory) return res.status(404).json({ message: 'Memory not found' });
+        res.status(200).json(memory);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error fetching memory' });
+    }
+});
+
+router.get('/explore', verifyToken, async (req, res) => {
+    try {
+        const { category, searchQuery } = req.query;
+        const currentUserId = req.userId;
+        const mongoose = require("mongoose");
+        const objectIdUser = new mongoose.Types.ObjectId(currentUserId);
+
+        const { generateEmbedding, averageEmbeddings } = require('../utils/embeddingHelper');
+        const Follower = require('../models/follower');
+
+        // 1. Get the list of users followed by the current user
+        const followingdocs = await Follower.find({ follower: currentUserId });
+        const followingIds = followingdocs.map(f => f.following);
+
+        // 2. Get target embedding
+        let targetEmbedding = null;
+        if (searchQuery) {
+            targetEmbedding = await generateEmbedding(searchQuery);
+        } else {
+            // Find User's own memories OR Liked memories
+            const ownMemories = await Memory.find({ userId: currentUserId }).select('+embedding');
+            const likedMemories = await Memory.find({ likes: currentUserId }).select('+embedding');
+            
+            const allEmbeddings = [...ownMemories, ...likedMemories]
+                .filter(m => m.embedding && m.embedding.length > 0)
+                .map(m => m.embedding);
+                
+            if (allEmbeddings.length > 0) {
+                targetEmbedding = averageEmbeddings(allEmbeddings);
+            }
+        }
+
+        const matchCriteria = {
+            userId: { $ne: objectIdUser }
+        };
+        
+        if (category) {
+            matchCriteria.category = category;
+        }
+
+        let pipeline = [];
+        
+        if (targetEmbedding) {
+            pipeline.push({
+                $vectorSearch: {
+                    index: "vector_index", 
+                    path: "embedding",
+                    queryVector: targetEmbedding,
+                    numCandidates: 100,
+                    limit: 50
+                }
+            });
+        }
+        
+        pipeline.push({ $match: matchCriteria });
+        
+        // Join Users
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "userId",
+                    foreignField: "_id",
+                    as: "userDoc"
+                }
+            },
+            { $unwind: "$userDoc" },
+            {
+                // Visibility Rules: Must be followed user or public profile
+                $match: {
+                    $or: [
+                        { "userDoc._id": { $in: followingIds } },
+                        { "userDoc.isPrivate": false }
+                    ]
+                }
+            }
+        );
+
+        if (!targetEmbedding) {
+            // If no search vector, just sort by date
+            pipeline.push({ $sort: { createdAt: -1 } });
+            pipeline.push({ $limit: 30 });
+        }
+        
+        // Format final response
+        pipeline.push({
+            $project: {
+                _id: 1,
+                title: 1,
+                description: 1,
+                category: 1,
+                location: 1,
+                photoUrl: 1,
+                createdAt: 1,
+                likes: 1,
+                comments: 1,
+                user: {
+                    _id: "$userDoc._id",
+                    name: "$userDoc.name",
+                    profilePic: "$userDoc.profilePic"
+                }
+            }
+        });
+
+        const results = await Memory.aggregate(pipeline);
+        res.status(200).json({ memories: results });
+    } catch (err) {
+        console.error("Explore error", err);
+        res.status(500).json({ message: "Server error generating explore feed" });
+    }
+});
+
+module.exports = router; 
