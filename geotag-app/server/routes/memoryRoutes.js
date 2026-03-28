@@ -1,33 +1,48 @@
-const express=require('express');
-const router=express.Router();
-const Memory=require('../models/memories');
-const verifyToken=require('../middleware/verifyToken');
+const express = require('express');
+const router = express.Router();
+const Memory = require('../models/memories');
+const verifyToken = require('../middleware/verifyToken');
+const { upload } = require('../middleware/cloudinaryConfig');
 
-router.post('/creatememory',verifyToken,async(req,res)=>{
-    try{
-        const userId=req.userId;//we got userId from verifyToken middleware
-        const { title, description, location, photoUrl } = req.body;
+router.post('/creatememory', verifyToken, upload.single('photo'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        // With multer, text fields are available in req.body
+        const { title, description, location } = req.body;
 
-         // Create a new Memory document
+        // Files uploaded to Cloudinary are in req.file
+        // We use the 'path' property provided by multer-storage-cloudinary for the URL
+        const photoUrl = req.file ? req.file.path : null;
+
+        if (!photoUrl) {
+            return res.status(400).json({ message: 'Memory image is required and failed to upload' });
+        }
+
+        // Location is transmitted as a string when using FormData
+        let parsedLocation;
+        try {
+            parsedLocation = typeof location === 'string' ? JSON.parse(location) : location;
+        } catch (e) {
+            return res.status(400).json({ message: 'Invalid location data' });
+        }
+
         const newMemory = new Memory({
             userId: userId,
-            title:title,
-            description:description,
+            title: title,
+            description: description,
             location: {
-              type: 'Point',
-              coordinates: location.coordinates, // [lng, lat]
-              address: location.address
+                type: 'Point',
+                coordinates: parsedLocation.coordinates, // [lng, lat]
+                address: parsedLocation.address
             },
-            photoUrl:photoUrl
-            //no need to set createdAt, defaults to now() as long as defined in schema
-          });
+            photoUrl: photoUrl
+        });
 
         const savedMemory = await newMemory.save();
-         //created status code is 201
-         res.status(201).json({ memory: savedMemory });
-    }
-    catch(err){
-       res.status(500).json({message:'server failed to create memory'});
+        res.status(201).json({ memory: savedMemory });
+    } catch (err) {
+        console.error("Memory creation error:", err);
+        res.status(500).json({ message: 'Server failed to create memory' });
     }
 });
 
@@ -59,27 +74,34 @@ router.get('/user/:id', async (req, res) => {
 
 
 
-router.patch('/editmemory/:id',verifyToken,async(req,res)=>{
-    try{
+router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req, res) => {
+    try {
         const memoryId = req.params.id;
-         const { title, description } = req.body;
-     
-         // Update memory, only if it belongs to the user
-         const updatedMemory = await Memory.findOneAndUpdate(
-           { _id: memoryId, userId: req.userId },
-           { title, description },
-           { new: true } // return the updated document
-         );
-     
-         if (!updatedMemory) {
-           return res.status(404).json({ message: 'Memory not found or not authorized' });
-         }
-     
-         res.status(200).json({ memory: updatedMemory });    
+        const { title, description } = req.body;
+
+        const updateData = { title, description };
+
+        // If a new photo is uploaded, update the photoUrl
+        if (req.file) {
+            updateData.photoUrl = req.file.path;
         }
-       catch(err){
-        res.status(500).json({message:'server failed to delete memory' });
+
+        // Update memory, only if it belongs to the user
+        const updatedMemory = await Memory.findOneAndUpdate(
+            { _id: memoryId, userId: req.userId },
+            updateData,
+            { new: true } // return the updated document
+        );
+
+        if (!updatedMemory) {
+            return res.status(404).json({ message: 'Memory not found or not authorized' });
         }
+
+        res.status(200).json({ memory: updatedMemory });
+    } catch (err) {
+        console.error("Memory edit error:", err);
+        res.status(500).json({ message: 'Server failed to update memory' });
+    }
 });
 
 router.delete('/deletememory/:id',verifyToken,async(req,res)=>{

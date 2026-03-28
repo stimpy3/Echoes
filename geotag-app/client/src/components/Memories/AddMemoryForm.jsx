@@ -9,7 +9,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     address: "",
     latitude: "",
     longitude: "",
-    photoUrl: "",
+    photo: null,
   });
   const [addrLoading, setAddrLoading] = useState(false);
 
@@ -29,6 +29,13 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleFileChange = (e) => {
+    setFormData({
+      ...formData,
+      photo: e.target.files[0],
     });
   };
 
@@ -95,36 +102,59 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
 
   
   const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
-  const handleSubmit =async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!formData.photo) {
+      alert("Please select a photo.");
+      return;
+    }
+
+    const data = new FormData();
+    data.append('title', formData.title);
+    data.append('description', formData.description);
+    data.append('location', JSON.stringify({
+      type: "Point",
+      coordinates: [
+        parseFloat(formData.longitude), // longitude first
+        parseFloat(formData.latitude),  // latitude second
+      ],
+      address: formData.address
+    }));
+    data.append('photo', formData.photo);
+
+    // Create a local preview URL for optimistic update
+    const previewUrl = URL.createObjectURL(formData.photo);
+
     const newMemory = {
-      //userId files will be set later in backend from token cookie(to link user and memory collections(table))
-     title: formData.title,
-     description: formData.description,
-     location: {
-       type: "Point", // required for GeoJSON
-       coordinates: [
-         parseFloat(formData.longitude), // longitude first
-         parseFloat(formData.latitude),  // latitude second
-       ],
-       address: formData.address
-     },
-     photoUrl: formData.photoUrl,
-     createdAt: new Date().toISOString(),
-   };
-    //optimistic ui update
+      title: formData.title,
+      description: formData.description,
+      location: {
+        type: "Point",
+        coordinates: [
+          parseFloat(formData.longitude),
+          parseFloat(formData.latitude),
+        ],
+        address: formData.address
+      },
+      photoUrl: previewUrl,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic UI update
     onAdd(newMemory);
     onClose();
 
-  try {
-    await axios.post(`${BASE_URL}/api/memory/creatememory`, newMemory, { withCredentials: true });
-    // optional: you could refresh memory list from backend here
-  } catch (err) {
-    console.error("Failed to save memory:", err);
-    // For now, no rollback — memory stays in UI
-    // Later you could implement rollback logic
-  }
+    try {
+      await axios.post(`${BASE_URL}/api/memory/creatememory`, data, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+    } catch (err) {
+      console.error("Failed to save memory:", err);
+    }
   };
 
   return (
@@ -176,22 +206,21 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
               />
             </div>
 
-            {/* Photo URL */}
+            {/* Photo Selection */}
             <div>
               <label className="block text-sm font-medium text-lightTxt dark:text-dlightTxt mb-1">
-                Photo URL
+                Upload Photo
               </label>
               <input
-                type="url"
-                name="photoUrl"
-                value={formData.photoUrl}
-                onChange={handleChange}
+                type="file"
+                name="photo"
+                accept="image/png, image/jpeg, image/jpg"
+                onChange={handleFileChange}
                 required
-                placeholder="https://example.com/photo.jpg"
                 className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <p className="text-xs text-gray-500 mt-1">
-                For now, use image URLs. We'll add file upload later!
+                Supported: PNG, JPEG, JPG.
               </p>
             </div>
 
