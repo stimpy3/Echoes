@@ -7,7 +7,7 @@ import axios from "axios";
 
 const TimelinePage = () => {
   const { dark } = useTheme();
-  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const currentMonthIndex = new Date().getMonth();
   const [memories, setMemories] = useState([]);
   const carouselRefs = useRef([...Array(12)].map(() => React.createRef()));
@@ -28,13 +28,15 @@ const TimelinePage = () => {
 
 
   const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
-  //Scroll to current month on mount
+  //Scroll to current month on mount only if it's the current year
   useEffect(() => {
-    const currentMonthDiv = monthRefs.current[currentMonthIndex].current;
-    if (currentMonthDiv) {
-      currentMonthDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (selectedYear === new Date().getFullYear()) {
+      const currentMonthDiv = monthRefs.current[currentMonthIndex].current;
+      if (currentMonthDiv) {
+        currentMonthDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
-  }, [currentMonthIndex]);
+  }, [selectedYear, currentMonthIndex]);
 
   const scrollCarousel = (monthIndex, direction) => {
     const carousel = carouselRefs.current[monthIndex].current;
@@ -44,11 +46,20 @@ const TimelinePage = () => {
     }
   };
 
-  // Group memories by month
+  // Determine if there are memories from previous years
+  const memoryYears = Array.from(new Set(memories.map(m => new Date(m.createdAt).getFullYear()))).sort((a,b)=>a-b);
+  const minYear = memoryYears.length > 0 ? Math.min(...memoryYears) : new Date().getFullYear();
+  const hasPreviousYear = selectedYear > minYear;
+  const isCurrentYearRealTime = selectedYear === new Date().getFullYear();
+
+  // Group memories by month for the selected year
   const memoriesByMonth = Array.from({ length: 12 }, () => []);
   memories.forEach(memory => {
-    const monthIndex = new Date(memory.createdAt).getMonth();
-    memoriesByMonth[monthIndex].push(memory);
+    const memoryDate = new Date(memory.createdAt);
+    if (memoryDate.getFullYear() === selectedYear) {
+      const monthIndex = memoryDate.getMonth();
+      memoriesByMonth[monthIndex].push(memory);
+    }
   });
 
    //fetch memories on mount
@@ -75,9 +86,22 @@ const TimelinePage = () => {
         <section className="sidebarSection  w-[17%] max-w-[200px] bg-main dark:bg-dmain min-h-screen flex flex-col">
           <div
             data-label="year section"
-            className="archivo leading-none w-full text-txt dark:text-dtxt text-[2.5rem] h-[130px] pb-[20px] pt-[70px] flex justify-center"
+            className="archivo leading-none w-full text-txt dark:text-dtxt text-[2.5rem] h-[130px] pb-[20px] pt-[70px] flex justify-center items-center gap-4"
           >
-            {currentYear}
+            <button 
+              onClick={() => setSelectedYear(prev => prev - 1)} 
+              className={`text-lightTxt dark:text-dlightTxt hover:text-txt dark:hover:text-dtxt transition-colors ${!hasPreviousYear ? 'opacity-0 pointer-events-none' : ''}`}
+            >
+              <ChevronLeft size={30} />
+            </button>
+            <span>{selectedYear}</span>
+            <button 
+              onClick={() => setSelectedYear(prev => prev + 1)}
+              disabled={isCurrentYearRealTime}
+              className={`text-lightTxt dark:text-dlightTxt hover:text-txt dark:hover:text-dtxt transition-colors ${isCurrentYearRealTime ? 'opacity-0 pointer-events-none' : ''}`}
+            >
+              <ChevronRight size={30} />
+            </button>
           </div>
 
           <section className="w-full flex">
@@ -111,7 +135,7 @@ const TimelinePage = () => {
                     <div
                       data-label="circle"
                       className={`w-[20px] aspect-square rounded-full border-[2px] flex items-center justify-center ${
-                        i === currentMonthIndex
+                        isCurrentYearRealTime && i === currentMonthIndex
                           ? 'border-orangeMain'
                           : 'border-lightMain2 dark:border-dborderColor'
                       }`}
@@ -119,18 +143,19 @@ const TimelinePage = () => {
                       <div
                         data-label="inner circle"
                         className={`w-[10px] aspect-square rounded-full ${
-                          i === currentMonthIndex
+                          isCurrentYearRealTime && i === currentMonthIndex
                             ? 'bg-orangeMain'
                             : 'bg-transparent'
                         }`}
                       ></div>
                     </div>
 
+                    {/* Lines logic: only show colorful line if current year real-time and it's current or before current month */}
                     {i < 11 && (
                       <div
                         data-label="vertLine"
                         className={`h-[200px] ${
-                          i === currentMonthIndex
+                          isCurrentYearRealTime && i === currentMonthIndex
                             ? 'bg-gradient-to-b from-orangeMain via-pinkMain to-cyanMain w-[5px]'
                             : 'bg-lightMain dark:bg-dborderColor w-[2px]'
                         }`}
@@ -217,7 +242,7 @@ const TimelinePage = () => {
                        playOnce={false}
                        glareColor="#ffffff">
                             <article
-                              key={memory.id}
+                              key={memory._id}
                               data-label="image container"
                               className="relative h-[200px] p-[8px] w-[200px] border-[1px] shadow-custom-dark-lg border-lightMain2 bg-main dark:bg-dtxt overflow-hidden"
                               style={{ transform: `rotate(${rotation}deg)` }}

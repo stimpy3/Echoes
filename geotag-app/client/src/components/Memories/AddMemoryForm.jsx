@@ -100,8 +100,8 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
   };
 
 
-  
-  const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
+
+  const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -193,7 +193,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
             {/* Description */}
             <div>
               <label className="block text-sm font-medium text-lightTxt dark:text-dlightTxt mb-1">
-                Description
+                Your memory
               </label>
               <textarea
                 name="description"
@@ -201,7 +201,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={handleChange}
                 required
                 rows="4"
-                placeholder="Describe your memory..."
+                placeholder="Start with what you saw, then what you did, and finally how it made you feel...."
                 className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
