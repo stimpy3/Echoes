@@ -294,7 +294,9 @@ useEffect(() => {
           )
         ) : (
           <div className="w-full h-[80vh] mt-2 rounded-xl overflow-hidden relative border border-borderColor dark:border-dborderColor">
+            
             <MapView
+              friendMemories={[]}
               memories={memories}
               homePosition={null}
               addingMode={false}

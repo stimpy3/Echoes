@@ -94,9 +94,14 @@ export default {
           '50%': { backgroundPosition: '100% 50%' },
           '100%': { backgroundPosition: '0% 50%' },
         },
+        shine: {
+          '0%': { 'background-position': '100%' },
+          '100%': { 'background-position': '-100%' },
+         },
       },
       animation: {
         gradient: 'gradient 8s ease infinite',
+        shine: 'shine 5s linear infinite',
       },
 	   boxShadow: {
         'custom-lg': '0 10px 25px rgba(0, 0, 0, 0.15)', // lighter or darker shadow

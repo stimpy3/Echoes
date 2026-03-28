@@ -9,10 +9,10 @@ const FriendMarker = ({ pfp,id,memory }) => {
   const customIcon = L.divIcon({
     className: "", // removes default leaflet marker styles
     html: `
-     <div class="w-[52px] h-[52px] relative hover:scale-[1.5] transition-all duration-200">
+     <div class="w-[52px] h-[52px] relative hover:scale-[1.2] transition-all duration-200">
        <div class="relative z-20 w-12 h-12 rounded-[10px] border-[2px] bg-gray-500 dark:border-lightMain bg-cover bg-center"
       style="background-image: url('${memory.photoUrl}');
-             border-color: ${getHexFromUserId(id)};">
+             border-color: white;">
       </div>
       <div class="z-20 absolute w-7 right-0 bottom-0 aspect-square rounded-full shadow-md bg-contain"
       style="background-image: url('${pfp}')"></div>

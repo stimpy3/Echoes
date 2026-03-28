@@ -290,8 +290,8 @@ if (!id || loading) {
 
       {/* Suggestions Section */}
       <section className="w-full mt-[50px] relative">
-        <p className="text-[1.5rem] pt-[20px] border-t border-borderColor dark:border-dborderColor">
-          Suggested for you
+        <p className=" text-[1.5rem] pt-[20px] border-t border-borderColor dark:border-dborderColor">
+         <span className="text-transparent bg-clip-text bg-gradient-main w-fit">Suggested for you</span>
         </p>
 
         <div
@@ -325,12 +325,12 @@ if (!id || loading) {
                       e.stopPropagation();
                       handleRequest(i, user._id);
                     }}
-                    className={`w-full p-[6px] rounded-[5px] text-white transition ${
-                      user.isRequested ? "bg-lgradient-main  dark:bg-dgradient-main" : "bg-gradient-main"
+                    className={`w-full p-[6px] rounded-[5px] text-dtxt dark:text-txt transition ${
+                      user.isRequested ? "bg-dlightMain2 dark:bg-lightMain2 " : "bg-dlightMain2 dark:bg-lightMain2"
                     }`}
                   >
                     {user.isRequested ? (
-                      <div className="flex justify-center items-center text-txt dark:text-dtxt">
+                      <div className="flex justify-center items-center text-dtxxt dark:text-txt">
                         Requested
                       </div>
                     ): (

@@ -8,7 +8,7 @@ const CustomMarker = ({ memory }) => {
   const customIcon = L.divIcon({
     className: "", // removes default leaflet marker styles
     html: `
-    <div class="w-[70px] h-[70px] relative hover:scale-[1.5] transition-all duration-200">
+    <div class="w-[70px] h-[70px] relative hover:scale-[1.1] transition-all duration-200">
        <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain bg-gray-500 dark:border-main  bg-cover bg-center"
          style="background-image: url('${memory.photoUrl}')">
       </div>

@@ -8,6 +8,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useHome } from "../context/HomeContext";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
 import { shortenText } from "../utils/textShorten";
+import ShinyText from '../components/Layout/ShinyText';
 import { useNavigate } from 'react-router-dom';
 
 import axios from "axios";
@@ -126,22 +127,18 @@ const fetchFollowing = async () => {
         {/* 🔹 Hint text */}
         {!addingMode && (
           <div className="w-fit absolute bottom-[20px] left-1/2 -translate-x-1/2 z-[950]">
-            <GradientText
-              colors={[
-                "#9f9f9fff",
-                "#3c3c3cff",
-                "#adadadff",
-                "#3c3c3cff",
-                "#727272ff",
-              ]}
-              animationSpeed={5}
-              showBorder={false}
-              className="font-semibold text-[1rem] whitespace-nowrap"
-            >
-              &lt;&lt;Click on any marker to view memories from that location&gt;&gt;
-            </GradientText>
-          </div>
+             <ShinyText
+               text="<< Click on any marker to view memories from that location >>"
+               disabled={false}
+               speed={2.5}
+               className="text-sm tracking-wide"
+             />
+           </div>
+
         )}
+
+        <div className="h-[30px] bg-[linear-gradient(to_top,theme(colors.fadeColor)_10%,transparent_100%)] 
+          dark:bg-[linear-gradient(to_top,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[900] bottom-[0px] py-[5px] left-0 right-0 px-[20px]"></div>
 
        {addingMode && (
          <button
@@ -184,7 +181,7 @@ const fetchFollowing = async () => {
            
              {/* 🔹 Overlay Button */}
            <button onClick={()=>{toggleFollowingList();fetchFollowing();}} className=" text-dtxt bg-dlightMain border-[1px] dark:border-dborderColor border-borderColor mb-[10px] dark:text-dtxt w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full">
-              <Layers2 />
+              <Layers2/>
            </button>
            
            {/* 🔹 Add / Cancel Button */}
@@ -333,9 +330,8 @@ const fetchFollowing = async () => {
         <></>
         }
         {/* 🔹 Bottom gradient */}
-        <div className="gradientContainerBottom absolute z-[900] h-[50px] bg-[linear-gradient(to_top,theme(colors.fadeColor)_0%,transparent_100%)] 
-          dark:bg-[linear-gradient(to_top,theme(colors.dfadeColor)_0%,transparent_100%)] bottom-0 w-full" />
 
+       
         {/* 🔹 Add Memory Form */}
         {showForm && selectedPosition && (
           <AddMemoryForm position={selectedPosition} onClose={handleFormClose}
