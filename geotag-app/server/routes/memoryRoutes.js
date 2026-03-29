@@ -3,7 +3,93 @@ const router = express.Router();
 const Memory = require('../models/memories');
 const verifyToken = require('../middleware/verifyToken');
 const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
-const { generateEmbedding } = require('../utils/embeddingHelper');
+const { generateEmbeddingWithRetry } = require('../utils/embeddingHelper');
+
+const buildProjectionStage = {
+    $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        category: 1,
+        location: 1,
+        photoUrl: 1,
+        createdAt: 1,
+        likes: 1,
+        comments: 1,
+        user: {
+            _id: "$userDoc._id",
+            name: "$userDoc.name",
+            profilePic: "$userDoc.profilePic"
+        }
+    }
+};
+
+const escapeRegex = (input = "") => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildPrivacyMatch = (followingIds) => ({
+    $match: {
+        $or: [
+            { "userDoc._id": { $in: followingIds } },
+            { "userDoc.isPrivate": false }
+        ]
+    }
+});
+
+const buildRecentEligiblePipeline = ({ matchCriteria, followingIds, limit = 30 }) => ([
+    { $match: matchCriteria },
+    {
+        $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "userDoc"
+        }
+    },
+    { $unwind: "$userDoc" },
+    buildPrivacyMatch(followingIds),
+    { $sort: { createdAt: -1 } },
+    { $limit: limit },
+    buildProjectionStage
+]);
+
+const buildLexicalPipeline = ({ matchCriteria, followingIds, searchQuery, limit = 30 }) => {
+    const trimmedQuery = (searchQuery || "").trim();
+    if (!trimmedQuery) return null;
+
+    const safeRegex = new RegExp(escapeRegex(trimmedQuery), "i");
+    return [
+        {
+            $match: {
+                ...matchCriteria,
+                $or: [
+                    { title: safeRegex },
+                    { description: safeRegex }
+                ]
+            }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "userDoc"
+            }
+        },
+        { $unwind: "$userDoc" },
+        buildPrivacyMatch(followingIds),
+        { $sort: { createdAt: -1 } },
+        { $limit: limit },
+        buildProjectionStage
+    ];
+};
+
+const getAdaptiveClusterCount = (embeddingCount) => {
+    if (embeddingCount >= 30) return 5;
+    if (embeddingCount >= 18) return 4;
+    if (embeddingCount >= 8) return 3;
+    if (embeddingCount >= 3) return 2;
+    return 1;
+};
 
 router.post('/creatememory', verifyToken, upload.single('photo'), async (req, res) => {
     try {
@@ -48,10 +134,15 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
         (async () => {
             try {
                 const textToEmbed = `${title} ${description}`;
-                const embedding = await generateEmbedding(textToEmbed);
+                const embedding = await generateEmbeddingWithRetry(textToEmbed, {
+                    maxRetries: 3,
+                    initialDelayMs: 300
+                });
                 if (embedding) {
                     await Memory.findByIdAndUpdate(savedMemory._id, { embedding });
                     console.log(`✅ Background embedding completed for memory: ${savedMemory._id}`);
+                } else {
+                    console.warn(`⚠️ Embedding generation failed after retries for memory: ${savedMemory._id}`);
                 }
             } catch (err) {
                 console.error("Background embedding failed:", err);
@@ -133,10 +224,15 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
             (async () => {
                 try {
                     const textToEmbed = `${title || updatedMemory.title} ${description || updatedMemory.description}`;
-                    const embedding = await generateEmbedding(textToEmbed);
+                    const embedding = await generateEmbeddingWithRetry(textToEmbed, {
+                        maxRetries: 3,
+                        initialDelayMs: 300
+                    });
                     if (embedding) {
                         await Memory.findByIdAndUpdate(memoryId, { embedding });
                         console.log(`✅ Background embedding update completed for memory: ${memoryId}`);
+                    } else {
+                        console.warn(`⚠️ Embedding update failed after retries for memory: ${memoryId}`);
                     }
                 } catch (err) {
                     console.error("Background embedding update failed:", err);
@@ -332,12 +428,29 @@ router.get('/single/:id', verifyToken, async (req, res) => {
 router.get('/explore', verifyToken, async (req, res) => {
     try {
         const { category, searchQuery } = req.query;
+        const normalizedCategory = typeof category === 'string' ? category.trim() : '';
+        const normalizedSearchQuery = typeof searchQuery === 'string' ? searchQuery.trim() : '';
         const currentUserId = req.userId;
         const mongoose = require("mongoose");
         const objectIdUser = new mongoose.Types.ObjectId(currentUserId);
 
-        const { generateEmbedding, kMeansCluster, cosineSimilarity } = require('../utils/embeddingHelper');
+        const { kMeansCluster, cosineSimilarity, averageEmbeddings } = require('../utils/embeddingHelper');
         const Follower = require('../models/follower');
+
+        const diagnostics = {
+            searchMode: Boolean(normalizedSearchQuery),
+            category: normalizedCategory || null,
+            historyInteractions: 0,
+            interactionEmbeddings: 0,
+            hasRecentLocation: false,
+            streamAContentCount: 0,
+            streamBGeoCount: 0,
+            streamSearchLexicalCount: 0,
+            fallbackCategoryCount: 0,
+            fallbackRelaxedCount: 0,
+            vectorError: null,
+            fallbackReason: null
+        };
 
         // 1. Get the list of users followed by the current user
         const followingdocs = await Follower.find({ follower: currentUserId });
@@ -349,9 +462,16 @@ router.get('/explore', verifyToken, async (req, res) => {
         console.log(`\n--- [Hybrid Explore Engine] ---`);
         console.log(`Building profile for User: ${currentUserId}`);
 
-        if (searchQuery) {
-            console.log(`Mode: Active Search ('${searchQuery}')`);
-            targetEmbedding = await generateEmbedding(searchQuery);
+        if (normalizedSearchQuery) {
+            console.log(`Mode: Active Search ('${normalizedSearchQuery}')`);
+            targetEmbedding = await generateEmbeddingWithRetry(normalizedSearchQuery, {
+                maxRetries: 2,
+                initialDelayMs: 250
+            });
+
+            if (!targetEmbedding) {
+                diagnostics.fallbackReason = 'search_embedding_unavailable';
+            }
         } else {
             console.log(`Mode: Passive Browsing (Mood + Geo Hybrid)`);
             // Find User's own memories OR Liked memories
@@ -372,6 +492,8 @@ router.get('/explore', verifyToken, async (req, res) => {
                 }
             }
 
+            diagnostics.historyInteractions = uniqueInteractions.length;
+
             console.log(`Found ${uniqueInteractions.length} unique historical interactions.`);
 
             // Extract embeddings
@@ -379,17 +501,21 @@ router.get('/explore', verifyToken, async (req, res) => {
                 .filter(m => m.embedding && m.embedding.length > 0)
                 .map(m => m.embedding);
 
+            diagnostics.interactionEmbeddings = embeddings.length;
+
             if (embeddings.length > 0) {
                 // Stream A: Mood Market (Clustering)
-                const clusters = kMeansCluster(embeddings, 3); 
+                const clusterCount = Math.min(getAdaptiveClusterCount(embeddings.length), embeddings.length);
+                const clusters = kMeansCluster(embeddings, clusterCount);
                 
-                // Find active mood (centroid closest to the most recent interaction)
-                const mostRecentEmbedding = embeddings[0];
+                // Find active mood (centroid closest to recent-interest profile)
+                const recentWindow = embeddings.slice(0, Math.min(5, embeddings.length));
+                const recentInterestProfile = averageEmbeddings(recentWindow) || embeddings[0];
                 let bestClusterIdx = 0;
                 let bestSim = -Infinity;
                 
                 for (let i = 0; i < clusters.length; i++) {
-                    const sim = cosineSimilarity(mostRecentEmbedding, clusters[i]);
+                    const sim = cosineSimilarity(recentInterestProfile, clusters[i]);
                     if (sim > bestSim) {
                         bestSim = sim;
                         bestClusterIdx = i;
@@ -404,7 +530,12 @@ router.get('/explore', verifyToken, async (req, res) => {
             const mostRecentWithLoc = uniqueInteractions.find(m => m.location && m.location.coordinates && m.location.coordinates.length === 2);
             if (mostRecentWithLoc) {
                 recentLocation = mostRecentWithLoc.location.coordinates;
+                diagnostics.hasRecentLocation = true;
                 console.log(`[Stream B - Local Explorer] Found recent location anchor: [${recentLocation[0]}, ${recentLocation[1]}]`);
+            }
+
+            if (!targetEmbedding && !recentLocation) {
+                diagnostics.fallbackReason = 'no_profile_signals';
             }
         }
 
@@ -412,56 +543,70 @@ router.get('/explore', verifyToken, async (req, res) => {
             userId: { $ne: objectIdUser }
         };
         
-        if (category) {
-            matchCriteria.category = category;
+        if (normalizedCategory) {
+            matchCriteria.category = normalizedCategory;
         }
 
         // --- Stream A (Content/Vector) Pipeline ---
         let contentResults = [];
         if (targetEmbedding) {
-            let pipelineA = [
-                {
-                    $vectorSearch: {
-                        index: "vector_index", 
-                        path: "embedding",
-                        queryVector: targetEmbedding,
-                        numCandidates: 100,
-                        limit: 30
-                    }
-                },
-                { $match: matchCriteria },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "userId",
-                        foreignField: "_id",
-                        as: "userDoc"
-                    }
-                },
-                { $unwind: "$userDoc" },
-                {
-                    $match: {
-                        $or: [
-                            { "userDoc._id": { $in: followingIds } },
-                            { "userDoc.isPrivate": false }
-                        ]
-                    }
-                },
-                {
-                    $project: {
-                        _id: 1, title: 1, description: 1, category: 1, location: 1,
-                        photoUrl: 1, createdAt: 1, likes: 1, comments: 1,
-                        user: { _id: "$userDoc._id", name: "$userDoc.name", profilePic: "$userDoc.profilePic" }
-                    }
+            try {
+                let pipelineA = [
+                    {
+                        $vectorSearch: {
+                            index: "vector_index",
+                            path: "embedding",
+                            queryVector: targetEmbedding,
+                            numCandidates: 100,
+                            limit: 30
+                        }
+                    },
+                    { $match: matchCriteria },
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "userId",
+                            foreignField: "_id",
+                            as: "userDoc"
+                        }
+                    },
+                    { $unwind: "$userDoc" },
+                    buildPrivacyMatch(followingIds),
+                    buildProjectionStage
+                ];
+                contentResults = await Memory.aggregate(pipelineA);
+                diagnostics.streamAContentCount = contentResults.length;
+                console.log(`[Stream A] Extracted ${contentResults.length} semantic matches.`);
+            } catch (streamAErr) {
+                diagnostics.vectorError = streamAErr.message || 'vector_search_failed';
+                diagnostics.fallbackReason = diagnostics.fallbackReason || 'vector_stream_failed';
+                console.warn('[Stream A] Vector search unavailable, degrading gracefully:', diagnostics.vectorError);
+            }
+        }
+
+        // --- Search lexical fallback (if semantic search could not produce results) ---
+        let searchFallbackResults = [];
+        if (normalizedSearchQuery && contentResults.length === 0) {
+            const lexicalPipeline = buildLexicalPipeline({
+                matchCriteria,
+                followingIds,
+                searchQuery: normalizedSearchQuery,
+                limit: 30
+            });
+
+            if (lexicalPipeline) {
+                searchFallbackResults = await Memory.aggregate(lexicalPipeline);
+                diagnostics.streamSearchLexicalCount = searchFallbackResults.length;
+
+                if (searchFallbackResults.length > 0) {
+                    diagnostics.fallbackReason = diagnostics.fallbackReason || 'lexical_search_fallback';
                 }
-            ];
-            contentResults = await Memory.aggregate(pipelineA);
-            console.log(`[Stream A] Extracted ${contentResults.length} semantic matches.`);
+            }
         }
 
         // --- Stream B (Geo) Pipeline ---
         let geoResults = [];
-        if (recentLocation && !searchQuery) {
+        if (recentLocation && !normalizedSearchQuery) {
             let pipelineB = [
                 {
                     $geoNear: {
@@ -482,70 +627,68 @@ router.get('/explore', verifyToken, async (req, res) => {
                     }
                 },
                 { $unwind: "$userDoc" },
-                {
-                    $match: {
-                        $or: [
-                            { "userDoc._id": { $in: followingIds } },
-                            { "userDoc.isPrivate": false }
-                        ]
-                    }
-                },
-                {
-                    $project: {
-                        _id: 1, title: 1, description: 1, category: 1, location: 1,
-                        photoUrl: 1, createdAt: 1, likes: 1, comments: 1,
-                        user: { _id: "$userDoc._id", name: "$userDoc.name", profilePic: "$userDoc.profilePic" }
-                    }
-                }
+                buildPrivacyMatch(followingIds),
+                buildProjectionStage
             ];
             geoResults = await Memory.aggregate(pipelineB);
+            diagnostics.streamBGeoCount = geoResults.length;
             console.log(`[Stream B] Extracted ${geoResults.length} localized matches within 50km.`);
         }
 
         // --- Blending ---
         let mergedMap = new Map();
-        
-        let maxLen = Math.max(contentResults.length, geoResults.length);
-        for(let i = 0; i < maxLen; i++){
-            if(i < contentResults.length && !mergedMap.has(contentResults[i]._id.toString())){
-                mergedMap.set(contentResults[i]._id.toString(), contentResults[i]);
-            }
-            if(i < geoResults.length && !mergedMap.has(geoResults[i]._id.toString())){
-                mergedMap.set(geoResults[i]._id.toString(), geoResults[i]);
+
+        const streams = [contentResults, geoResults, searchFallbackResults];
+        const maxLen = Math.max(...streams.map(arr => arr.length), 0);
+        for (let i = 0; i < maxLen; i++) {
+            for (const stream of streams) {
+                if (i < stream.length && !mergedMap.has(stream[i]._id.toString())) {
+                    mergedMap.set(stream[i]._id.toString(), stream[i]);
+                }
             }
         }
 
         let finalResults = Array.from(mergedMap.values());
         console.log(`[Blending] Total unique feed generated: ${finalResults.length} memories.`);
 
-        // --- Stream C (Fallback) ---
+        // --- Stream C (Fallback Ladder, strict privacy preserved) ---
         if (finalResults.length === 0) {
-            console.log(`[Stream C - Fallback] No recommendations found. Fetching recent public posts.`);
-            const fallbackPipeline = [
-                { $match: matchCriteria },
-                {
-                    $lookup: {
-                        from: "users",
-                        localField: "userId",
-                        foreignField: "_id",
-                        as: "userDoc"
-                    }
-                },
-                { $unwind: "$userDoc" },
-                { $match: { "userDoc.isPrivate": false } },
-                { $sort: { createdAt: -1 } },
-                { $limit: 30 },
-                {
-                    $project: {
-                        _id: 1, title: 1, description: 1, category: 1, location: 1,
-                        photoUrl: 1, createdAt: 1, likes: 1, comments: 1,
-                        user: { _id: "$userDoc._id", name: "$userDoc.name", profilePic: "$userDoc.profilePic" }
-                    }
-                }
-            ];
-            finalResults = await Memory.aggregate(fallbackPipeline);
+            console.log(`[Stream C - Fallback] No blended results. Running strict-privacy fallback ladder.`);
+
+            const categoryFallback = await Memory.aggregate(
+                buildRecentEligiblePipeline({
+                    matchCriteria,
+                    followingIds,
+                    limit: 30
+                })
+            );
+            diagnostics.fallbackCategoryCount = categoryFallback.length;
+            finalResults = categoryFallback;
+
+            if (finalResults.length === 0 && normalizedCategory) {
+                const relaxedMatchCriteria = {
+                    userId: { $ne: objectIdUser }
+                };
+
+                const relaxedFallback = await Memory.aggregate(
+                    buildRecentEligiblePipeline({
+                        matchCriteria: relaxedMatchCriteria,
+                        followingIds,
+                        limit: 30
+                    })
+                );
+
+                diagnostics.fallbackRelaxedCount = relaxedFallback.length;
+                finalResults = relaxedFallback;
+                diagnostics.fallbackReason = diagnostics.fallbackReason || 'category_relaxed_fallback';
+            }
+
+            if (finalResults.length === 0) {
+                diagnostics.fallbackReason = diagnostics.fallbackReason || 'eligible_corpus_empty';
+            }
         }
 
+        console.log('[Explore Diagnostics]', diagnostics);
         console.log('--- [End Log] ---\n');
         res.status(200).json({ memories: finalResults });
     } catch (err) {

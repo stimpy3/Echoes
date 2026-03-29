@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { NavLink } from "react-router-dom";
-import { MoonStar, SunMedium, LogOut, Settings, ChartNoAxesColumn, MapPinHouse, Bell, MessageCircleMore, Globe, Lock } from 'lucide-react';
+import { MoonStar, SunMedium, LogOut, Settings, ChartNoAxesColumn, MapPinHouse, Bell, MessageCircleMore, Globe, Lock, Menu, X } from 'lucide-react';
 
 import { useTheme } from "../../context/ThemeContext";
 import { useHome } from '../../context/HomeContext';
@@ -19,6 +19,7 @@ const Navbar = () => {
   const [profilePic, setProfilePic] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const notifCount = notifications.length;
 
   const [openNotif, setOpenNotif] = useState(false);
@@ -68,6 +69,17 @@ const Navbar = () => {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -126,15 +138,15 @@ const Navbar = () => {
 
   return (
     <nav className="transparent bg-[linear-gradient(to_bottom,theme(colors.fadeColor)_10%,transparent_100%)] 
-          dark:bg-[linear-gradient(to_bottom,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[999] top-[0px] py-[5px] left-0 right-0 px-[20px]">
-      <div className="flex justify-between items-center h-[50px] relative z-10">
+          dark:bg-[linear-gradient(to_bottom,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[999] top-[0px] py-[5px] left-0 right-0 px-[10px] sm:px-[20px]">
+      <div className="flex justify-between items-center h-[50px] relative z-10 gap-2">
         {/* Logo/Brand */}
         <Link to="/home" className="flex items-center space-x-2">
           <div className='bg-[url("/logo.png")] bg-contain bg-no-repeat aspect-[445/549] h-[35px]'></div>
         </Link>
 
         {/* Navigation Links */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center space-x-[12px] py-[5px] px-[5px] h-full bg-main/50 dark:bg-dborderColor/50 backdrop-blur-[2px] border-[1px] border-borderColor dark:border-dborderColor rounded-full">
+        <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center space-x-[12px] py-[5px] px-[5px] h-full bg-main/50 dark:bg-dborderColor/50 backdrop-blur-[2px] border-[1px] border-borderColor dark:border-dborderColor rounded-full">
           <NavLink to="/home" className={({ isActive }) =>
             `p-[5px] h-full flex items-center justify-center rounded-full text-[1.2rem] w-[80px] text-center
                      text-sm font-medium ${isActive ?
@@ -172,8 +184,8 @@ const Navbar = () => {
           </NavLink>
         </div>
 
-        <div className='w-fit h-[50px] flex items-center'>
-          <div className="relative mr-5" ref={notifRef}>
+        <div className='w-fit h-[50px] flex items-center gap-2 sm:gap-4'>
+          <div className="relative" ref={notifRef}>
             <button onClick={() => setOpenNotif(prev => !prev)} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full relative">
               <Bell className="scale-[0.9]" />
               {notifCount > 0 && (
@@ -185,12 +197,12 @@ const Navbar = () => {
 
             {/* Dropdown Notif */}
             {openNotif && (
-              <div className="absolute right-0 top-[48px] w-fit p-[5px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md backdrop-blur-md">
+              <div className="absolute right-0 top-[48px] w-[min(92vw,360px)] p-[5px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md backdrop-blur-md">
                 {notifications.length === 0 ? (
                   <p className="text-sm text-txt p-[2px] w-fit dark:text-dtxt whitespace-nowrap">No notifications yet</p>
                 ) : (
                   notifications.map((req, i) => (
-                    <div key={i} className="flex items-center min-w-[320px] justify-between gap-2 py-1 border-b border-gray-300 last:border-none">
+                    <div key={i} className="flex items-center min-w-0 justify-between gap-2 py-1 border-b border-gray-300 last:border-none">
                       {req.sender.profilePic ? (
                         <img src={req.sender.profilePic} alt="pfp" className="w-8 h-8 rounded-full object-cover" />
                       ) : (
@@ -213,11 +225,11 @@ const Navbar = () => {
             )}
           </div>
 
-          <button onClick={handleChat} className="flex text-borderColor dark:text-dlightTxt items-center justify-center mr-5">
+          <button onClick={handleChat} className="flex text-borderColor dark:text-dlightTxt items-center justify-center">
             <MessageCircleMore />
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
 
             {/* Settings Button */}
             <div className="relative" ref={settingsRef}>
@@ -287,8 +299,101 @@ const Navbar = () => {
             </div>
 
           </div>
+
+          <button
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className="md:hidden p-2 rounded-full text-borderColor dark:text-dlightTxt hover:bg-white/10"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
       </div>
+
+      {mobileMenuOpen && (
+        <div className="md:hidden mt-2 rounded-xl border border-borderColor dark:border-dborderColor bg-main/80 dark:bg-dborderColor/80 backdrop-blur-md p-2">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <NavLink
+              to="/home"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
+              }
+            >
+              Map
+            </NavLink>
+            <NavLink
+              to="/explore"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
+              }
+            >
+              Explore
+            </NavLink>
+            <NavLink
+              to="/timeline"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
+              }
+            >
+              Timeline
+            </NavLink>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate('/profile');
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/30 dark:bg-black/20 text-txt dark:text-dtxt text-sm"
+            >
+              Profile
+            </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handlehomeLocation();
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/30 dark:bg-black/20 text-txt dark:text-dtxt text-sm"
+            >
+              Home
+            </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate('/analytics');
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/30 dark:bg-black/20 text-txt dark:text-dtxt text-sm"
+            >
+              Analytics
+            </button>
+            <button
+              onClick={() => setDark((prev) => !prev)}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/30 dark:bg-black/20 text-txt dark:text-dtxt text-sm"
+            >
+              {dark ? "Light" : "Dark"}
+            </button>
+            <button
+              onClick={handlePrivacyToggle}
+              className="w-full col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/30 dark:bg-black/20 text-txt dark:text-dtxt text-sm"
+            >
+              {isPrivate ? "Private Account" : "Public Account"}
+            </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                logOutUser();
+              }}
+              className="w-full col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-sm"
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

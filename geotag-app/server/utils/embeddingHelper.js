@@ -31,6 +31,34 @@ async function generateEmbedding(text) {
     }
 }
 
+async function generateEmbeddingWithRetry(text, options = {}) {
+    const {
+        maxRetries = 2,
+        initialDelayMs = 250,
+        backoffMultiplier = 2
+    } = options;
+
+    let attempt = 0;
+    let delayMs = initialDelayMs;
+
+    while (attempt <= maxRetries) {
+        const embedding = await generateEmbedding(text);
+        if (embedding && embedding.length > 0) {
+            return embedding;
+        }
+
+        if (attempt === maxRetries) {
+            break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= backoffMultiplier;
+        attempt += 1;
+    }
+
+    return null;
+}
+
 /**
  * Mathematically computes the mean of an array of 384-dimensional vectors.
  * @param {number[][]} embeddings - Array of embedding arrays.
@@ -148,4 +176,10 @@ getExtractor().then(() => {
     console.error("❌ Failed to pre-load embedding model:", err);
 });
 
-module.exports = { generateEmbedding, averageEmbeddings, kMeansCluster, cosineSimilarity };
+module.exports = {
+    generateEmbedding,
+    generateEmbeddingWithRetry,
+    averageEmbeddings,
+    kMeansCluster,
+    cosineSimilarity
+};
