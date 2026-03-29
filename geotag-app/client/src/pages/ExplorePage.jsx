@@ -13,6 +13,7 @@ const ExplorePage = () => {
     const [category, setCategory] = useState("");
     const [currentUserId, setCurrentUserId] = useState(null);
     const [selectedMemoryId, setSelectedMemoryId] = useState(null);
+    const [openReasonMemoryId, setOpenReasonMemoryId] = useState(null);
 
     const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
 
@@ -48,6 +49,11 @@ const ExplorePage = () => {
     const handleSearch = (e) => {
         e.preventDefault();
         fetchExploreMemories();
+    };
+
+    const toggleReasonTooltip = (e, memoryId) => {
+        e.stopPropagation();
+        setOpenReasonMemoryId((prev) => (prev === memoryId ? null : memoryId));
     };
 
     return (
@@ -99,9 +105,31 @@ const ExplorePage = () => {
                         {memories.map(memory => (
                             <div
                                 key={memory._id}
-                                onClick={() => setSelectedMemoryId(memory._id)}
+                                onClick={() => {
+                                    setOpenReasonMemoryId(null);
+                                    setSelectedMemoryId(memory._id);
+                                }}
                                 className="group cursor-pointer relative aspect-square overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gray-200"
                             >
+                                <button
+                                    type="button"
+                                    onClick={(e) => toggleReasonTooltip(e, memory._id)}
+                                    className="absolute top-2 right-2 z-30 h-7 w-7 rounded-full bg-black/55 text-white text-sm font-semibold flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                    aria-label="Why this was recommended"
+                                    title="Why this was recommended"
+                                >
+                                    i
+                                </button>
+
+                                {openReasonMemoryId === memory._id && (
+                                    <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="absolute z-30 top-10 right-2 w-[220px] rounded-xl bg-black/85 text-white p-3 text-xs leading-relaxed shadow-lg"
+                                    >
+                                        {memory.recommendationReason || "Recommended based on your interests, activity, and available posts."}
+                                    </div>
+                                )}
+
                                 <img
                                     src={memory.photoUrl}
                                     alt={memory.title}

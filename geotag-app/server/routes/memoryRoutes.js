@@ -91,6 +91,40 @@ const getAdaptiveClusterCount = (embeddingCount) => {
     return 1;
 };
 
+const buildReasonText = ({ source, searchQuery, category }) => {
+    if (source === 'semantic_search') {
+        return `Recommended because it is similar to your search: "${searchQuery}".`;
+    }
+    if (source === 'semantic_profile') {
+        if (category) {
+            return `Recommended because it matches your interests and the ${category} category.`;
+        }
+        return "Recommended because it matches topics you usually post, like, or engage with.";
+    }
+    if (source === 'geo') {
+        if (category) {
+            return `Recommended because it is near places you interact with and in ${category}.`;
+        }
+        return "Recommended because it is near places you recently interacted with.";
+    }
+    if (source === 'lexical_search') {
+        return `Recommended because the title or description matches your search: "${searchQuery}".`;
+    }
+    if (source === 'fallback_category') {
+        return `Recommended because it is a recent post in ${category}.`;
+    }
+    if (source === 'fallback_recent') {
+        return "Recommended because it is a recent post from accounts you can view.";
+    }
+    return "Recommended based on your Explore activity and available posts.";
+};
+
+const attachReason = (memories, reasonText, source) => memories.map((memory) => ({
+    ...memory,
+    recommendationReason: reasonText,
+    recommendationSource: source
+}));
+
 router.post('/creatememory', verifyToken, upload.single('photo'), async (req, res) => {
     try {
         const userId = req.userId;
@@ -575,6 +609,12 @@ router.get('/explore', verifyToken, async (req, res) => {
                     buildProjectionStage
                 ];
                 contentResults = await Memory.aggregate(pipelineA);
+                const semanticReason = buildReasonText({
+                    source: normalizedSearchQuery ? 'semantic_search' : 'semantic_profile',
+                    searchQuery: normalizedSearchQuery,
+                    category: normalizedCategory
+                });
+                contentResults = attachReason(contentResults, semanticReason, normalizedSearchQuery ? 'semantic_search' : 'semantic_profile');
                 diagnostics.streamAContentCount = contentResults.length;
                 console.log(`[Stream A] Extracted ${contentResults.length} semantic matches.`);
             } catch (streamAErr) {
@@ -596,6 +636,11 @@ router.get('/explore', verifyToken, async (req, res) => {
 
             if (lexicalPipeline) {
                 searchFallbackResults = await Memory.aggregate(lexicalPipeline);
+                searchFallbackResults = attachReason(
+                    searchFallbackResults,
+                    buildReasonText({ source: 'lexical_search', searchQuery: normalizedSearchQuery }),
+                    'lexical_search'
+                );
                 diagnostics.streamSearchLexicalCount = searchFallbackResults.length;
 
                 if (searchFallbackResults.length > 0) {
@@ -631,6 +676,11 @@ router.get('/explore', verifyToken, async (req, res) => {
                 buildProjectionStage
             ];
             geoResults = await Memory.aggregate(pipelineB);
+            geoResults = attachReason(
+                geoResults,
+                buildReasonText({ source: 'geo', category: normalizedCategory }),
+                'geo'
+            );
             diagnostics.streamBGeoCount = geoResults.length;
             console.log(`[Stream B] Extracted ${geoResults.length} localized matches within 50km.`);
         }
@@ -663,7 +713,14 @@ router.get('/explore', verifyToken, async (req, res) => {
                 })
             );
             diagnostics.fallbackCategoryCount = categoryFallback.length;
-            finalResults = categoryFallback;
+            finalResults = attachReason(
+                categoryFallback,
+                buildReasonText({
+                    source: normalizedCategory ? 'fallback_category' : 'fallback_recent',
+                    category: normalizedCategory
+                }),
+                normalizedCategory ? 'fallback_category' : 'fallback_recent'
+            );
 
             if (finalResults.length === 0 && normalizedCategory) {
                 const relaxedMatchCriteria = {
@@ -679,7 +736,11 @@ router.get('/explore', verifyToken, async (req, res) => {
                 );
 
                 diagnostics.fallbackRelaxedCount = relaxedFallback.length;
-                finalResults = relaxedFallback;
+                finalResults = attachReason(
+                    relaxedFallback,
+                    buildReasonText({ source: 'fallback_recent' }),
+                    'fallback_recent'
+                );
                 diagnostics.fallbackReason = diagnostics.fallbackReason || 'category_relaxed_fallback';
             }
 
