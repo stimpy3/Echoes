@@ -63,22 +63,27 @@ const Login = ({ onSwitchToSignup }) => {
 
    const pinsRef = useRef([]);
   
-    useEffect(() => {
-      // Select all pins using ref array
+  useEffect(() => {
+    let ctx = gsap.context(() => {
+      const validPins = pinsRef.current.filter(Boolean);
+      if (validPins.length === 0) return;
+
       gsap.fromTo(
-    pinsRef.current,
-    { opacity: 0, y: 50, scale: 0 },
-    {
-      delay: 0.5,
-      opacity: 1,
-      y: 0,
-      scale: (i) => parseFloat(pinsRef.current[i].getAttribute('data-scale')),
-      duration: 0.8,
-      stagger: 0.3,
-      ease: 'power3.out',
-    }
-  );
-    }, []);
+        validPins,
+        { opacity: 0, y: 50, scale: 0 },
+        {
+          delay: 0.5,
+          opacity: 1,
+          y: 0,
+          scale: (i, el) => parseFloat(el.getAttribute('data-scale') || '1'),
+          duration: 0.8,
+          stagger: 0.3,
+          ease: 'power3.out',
+        }
+      );
+    });
+    return () => ctx.revert();
+  }, []);
 
 const fromProps = useMemo(() => ({ opacity: 0, y: 40 }), []);
 const toProps = useMemo(() => ({ opacity: 1, y: 0 }), []);

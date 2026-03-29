@@ -95,12 +95,12 @@ const ExplorePage = () => {
                         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-main border-solid"></div>
                     </div>
                 ) : memories.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 w-full">
                         {memories.map(memory => (
                             <div
                                 key={memory._id}
                                 onClick={() => setSelectedMemoryId(memory._id)}
-                                className="group cursor-pointer relative aspect-square rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gray-200"
+                                className="group cursor-pointer relative aspect-square overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gray-200"
                             >
                                 <img
                                     src={memory.photoUrl}
