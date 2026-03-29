@@ -2,9 +2,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Map, LayoutGrid } from "lucide-react";
 import axios from "axios";
-import MapView from "../components/Map/MapView";
+import TimelineMapView from "../components/Map/TimelineMapView";
 import Navbar from "../components/Layout/Navbar";
 import MemoryCard from "../components/Memories/MemoryCard";
+import PostModal from "../components/Memories/PostModal";
 import BareHomePage from './BarebonesPages/BareProfilePage';
 import Lottie from "lottie-react";
 import animationData from "../data/animationData/emptyAnimation.json";
@@ -24,6 +25,7 @@ const ProfilePage = () => {
   const [followState, setFollowState] = useState("none");
 // "none" | "requested" | "following"
   const [currentUserId, setCurrentUserId] = useState("");
+  const [selectedMemoryId, setSelectedMemoryId] = useState(null);
 
 
   // --- HOOKS ---
@@ -306,17 +308,22 @@ useEffect(() => {
           )
         ) : (
           <div className="w-full h-[80vh] mt-2 rounded-xl overflow-hidden relative border border-borderColor dark:border-dborderColor">
-            
-            <MapView
-              friendMemories={[]}
+            <TimelineMapView
               memories={memories}
-              homePosition={null}
-              addingMode={false}
-              onMapClick={() => {}}
+              onPinClick={(id) => setSelectedMemoryId(id)}
             />
           </div>
         )}
       </div>
+
+      {selectedMemoryId && (
+        <PostModal
+          memoryId={selectedMemoryId}
+          currentUserId={currentUserId}
+          onClose={() => setSelectedMemoryId(null)}
+        />
+      )}
+
       {showUnfollowModal && (
   <>
     {/* Background overlay */}
