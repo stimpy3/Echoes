@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Map, LayoutGrid } from "lucide-react";
+import { ChevronLeft, Map, LayoutGrid, Lock } from "lucide-react";
 import axios from "axios";
 import TimelineMapView from "../components/Map/TimelineMapView";
 import Navbar from "../components/Layout/Navbar";
@@ -118,13 +118,20 @@ useEffect(() => {
   // Fetch user's memories
   useEffect(() => {
     const fetchMemories = async () => {
+      
+      
       try {
         const res = await axios.get(`${BASE_URL}/api/memory/user/${id}`, {
           withCredentials: true,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
         });
         setMemories(res.data.memories || []);
       } catch (err) {
         console.error("Error fetching memories:", err);
+        setMemories([]);
       } finally {
         setLoading(false);
       }
@@ -166,6 +173,16 @@ useEffect(() => {
      return <BareHomePage />;
   }
 
+    const isOwnProfile = currentUserId && id && currentUserId === id;
+    const canViewPrivateContent = isOwnProfile || !user?.isPrivate || followState === "following";
+    console.log("🔍 Profile Visibility Debug:", {
+  isOwnProfile,
+  isPrivate: user?.isPrivate,
+  followState,
+  canViewPrivateContent,
+  userId: id,
+  currentUserId
+});
   const handleOpenChat= async()=>{
     navigate("/chat", {
        state: {
@@ -287,7 +304,17 @@ useEffect(() => {
         </div>
 
         {/* Tab content */}
-        {activeTab === "posts" ? (
+        {!canViewPrivateContent ? (
+          <div className="w-full min-h-[80vh] mt-4 rounded-xl border border-borderColor dark:border-dborderColor flex flex-col items-center justify-center text-center px-6">
+            <div className="w-14 h-14 rounded-full bg-lightMain dark:bg-dlightMain flex items-center justify-center mb-4">
+              <Lock size={26} className="text-txt dark:text-dtxt" />
+            </div>
+            <p className="text-lg font-semibold text-txt dark:text-dtxt">This account is private</p>
+            <p className="text-sm text-txt2 dark:text-dtxt2 mt-2 max-w-md">
+              Follow this user to view their posts and map memories.
+            </p>
+          </div>
+        ) : activeTab === "posts" ? (
           memories.length === 0 ? (
             <div className="pb-[10px] flex flex-col items-center justify-center text-center w-full min-h-[80vh] rounded-lg">
               <Lottie
@@ -316,7 +343,7 @@ useEffect(() => {
         )}
       </div>
 
-      {selectedMemoryId && (
+      {selectedMemoryId && canViewPrivateContent && (
         <PostModal
           memoryId={selectedMemoryId}
           currentUserId={currentUserId}

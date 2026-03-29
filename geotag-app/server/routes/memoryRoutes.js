@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Memory = require('../models/memories');
+const User = require('../models/users');
+const Follower = require('../models/follower');
 const verifyToken = require('../middleware/verifyToken');
 const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
 const { generateEmbeddingWithRetry } = require('../utils/embeddingHelper');
@@ -30,10 +32,35 @@ const buildPrivacyMatch = (followingIds) => ({
     $match: {
         $or: [
             { "userDoc._id": { $in: followingIds } },
-            { "userDoc.isPrivate": false }
+            { "userDoc.isPrivate": { $ne: true } }
         ]
     }
 });
+
+const buildGlobalPublicPipeline = ({ currentUserObjectId, limit = 30 }) => ([
+    {
+        $match: {
+            userId: { $ne: currentUserObjectId }
+        }
+    },
+    {
+        $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "userDoc"
+        }
+    },
+    { $unwind: "$userDoc" },
+    {
+        $match: {
+            "userDoc.isPrivate": { $ne: true }
+        }
+    },
+    { $sort: { createdAt: -1 } },
+    { $limit: limit },
+    buildProjectionStage
+]);
 
 const buildRecentEligiblePipeline = ({ matchCriteria, followingIds, limit = 30 }) => ([
     { $match: matchCriteria },
@@ -115,6 +142,9 @@ const buildReasonText = ({ source, searchQuery, category }) => {
     }
     if (source === 'fallback_recent') {
         return "Recommended because it is a recent post from accounts you can view.";
+    }
+    if (source === 'fallback_public') {
+        return "Recommended because it is a recent public post while we warm up your personalized feed.";
     }
     return "Recommended based on your Explore activity and available posts.";
 };
@@ -204,9 +234,30 @@ router.get('/fetchmemory',verifyToken,async(req,res)=>{
 
 
 //this one is to get memories of a specific user for ProfilePage
-router.get('/user/:id', async (req, res) => {
+router.get('/user/:id', verifyToken, async (req, res) => {
   try {
-    const memories = await Memory.find({ userId: req.params.id }).sort({ createdAt: -1 });
+    const profileUserId = req.params.id;
+    const currentUserId = req.userId;
+
+    if (profileUserId !== currentUserId) {
+        const profileUser = await User.findById(profileUserId).select('isPrivate');
+        if (!profileUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (profileUser.isPrivate) {
+            const isFollowing = await Follower.exists({
+                follower: currentUserId,
+                following: profileUserId
+            });
+
+            if (!isFollowing) {
+                return res.status(403).json({ message: 'This account is private' });
+            }
+        }
+    }
+
+    const memories = await Memory.find({ userId: profileUserId }).sort({ createdAt: -1 });
     res.status(200).json({ memories });
   } catch (err) {
     console.error(err);
@@ -482,6 +533,7 @@ router.get('/explore', verifyToken, async (req, res) => {
             streamSearchLexicalCount: 0,
             fallbackCategoryCount: 0,
             fallbackRelaxedCount: 0,
+            fallbackPublicCount: 0,
             vectorError: null,
             fallbackReason: null
         };
@@ -745,7 +797,25 @@ router.get('/explore', verifyToken, async (req, res) => {
             }
 
             if (finalResults.length === 0) {
-                diagnostics.fallbackReason = diagnostics.fallbackReason || 'eligible_corpus_empty';
+                const publicFallback = await Memory.aggregate(
+                    buildGlobalPublicPipeline({
+                        currentUserObjectId: objectIdUser,
+                        limit: 30
+                    })
+                );
+
+                diagnostics.fallbackPublicCount = publicFallback.length;
+                finalResults = attachReason(
+                    publicFallback,
+                    buildReasonText({ source: 'fallback_public' }),
+                    'fallback_public'
+                );
+
+                if (finalResults.length > 0) {
+                    diagnostics.fallbackReason = diagnostics.fallbackReason || 'public_global_fallback';
+                } else {
+                    diagnostics.fallbackReason = diagnostics.fallbackReason || 'eligible_corpus_empty';
+                }
             }
         }
 

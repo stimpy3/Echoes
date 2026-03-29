@@ -1,6 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const verifyToken=require('../middleware/verifyToken');
+const User = require("../models/users");
 const FollowRequest = require("../models/followRequest");
 const Follower = require("../models/follower");
 
@@ -13,6 +14,25 @@ router.post("/request", verifyToken, async (req, res) => {
     // Safety: cannot request yourself
     if (sender === receiverId) {
       return res.status(400).json({ message: "You cannot follow yourself" });
+    }
+
+    const receiverUser = await User.findById(receiverId).select("isPrivate");
+    if (!receiverUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Public accounts: follow directly, no request state.
+    if (!receiverUser.isPrivate) {
+      await Follower.updateOne(
+        { follower: sender, following: receiverId },
+        { $setOnInsert: { follower: sender, following: receiverId } },
+        { upsert: true }
+      );
+
+      // Remove stale request if one exists from older behavior.
+      await FollowRequest.deleteOne({ sender, receiver: receiverId });
+
+      return res.status(200).json({ following: true, requested: false, message: "Followed" });
     }
 
     // Try finding existing request

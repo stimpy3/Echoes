@@ -154,7 +154,7 @@ useEffect(() => {
     //bare bones of home page nav bar as placeholder while loading
    <BareHomePage/>
       :
-    <div className="min-h-[100vh] w-[100vw] relative max-[550px]:max-h-fit flex max-[550px]:flex-col items-center bg-dlightMain">
+    <div className="h-[100vh] w-[100vw] relative max-[550px]:max-h-fit flex max-[550px]:flex-col items-center bg-dlightMain">
        {(error)?
       <div className='flex items-center text-white bg-red-500/30 backdrop-blur-md absolute z-[50] top-[20px] left-[50%] -translate-x-1/2 p-[10px] rounded-md border-[1px] border-red-500'>
         {error}

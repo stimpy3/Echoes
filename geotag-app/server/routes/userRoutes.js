@@ -98,11 +98,24 @@ router.get("/status/:userId", verifyToken, async (req, res) => {
     const currentUserId = req.userId;
     const profileUserId = req.params.userId;
 
+    const profileUser = await User.findById(profileUserId).select("isPrivate");
+    if (!profileUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     // Check if already following
     const isFollowing = await Follower.findOne({
       follower: currentUserId,
       following: profileUserId
     });
+
+    // Public accounts should never show request state.
+    if (!profileUser.isPrivate) {
+      return res.json({
+        following: !!isFollowing,
+        requested: false
+      });
+    }
 
     // Check if request pending
     const isRequested = await FollowRequest.findOne({
@@ -126,14 +139,22 @@ router.get("/status/:userId", verifyToken, async (req, res) => {
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.params.id; // ID from URL
-    const user = await User.findById(userId).select('_id name email profilePic home'); 
+    let user = await User.findById(userId).select('_id name email profilePic home isPrivate'); 
     // You can include any other fields you want to send
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.status(200).json(user);
+    // Backfill older documents that do not have isPrivate yet
+    if (typeof user.isPrivate === 'undefined') {
+      await User.updateOne({ _id: userId }, { $set: { isPrivate: false } });
+      user = await User.findById(userId).select('_id name email profilePic home isPrivate');
+    }
+
+    const payload = user.toObject();
+    payload.isPrivate = Boolean(payload.isPrivate);
+    res.status(200).json(payload);
   } catch (err) {
     console.error('Error fetching user:', err);
     res.status(500).json({ message: 'Server error' });
