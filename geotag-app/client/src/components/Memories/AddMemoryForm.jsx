@@ -1,6 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ImagePlus, X as XIcon } from 'lucide-react';
+
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10MB
+const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/jpg"];
+
+const formatBytes = (bytes) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const AddMemoryForm = ({ onClose, onAdd, position }) => {
   const [formData, setFormData] = useState({
@@ -12,6 +21,21 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     photo: null,
   });
   const [addrLoading, setAddrLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoError, setPhotoError] = useState("");
+  const fileInputRef = useRef(null);
+
+  /*
+  Object URLs are not garbage collected — the browser holds the blob alive until the URL is
+  explicitly revoked. Without this, picking a different photo several times in one session
+  leaks every previous image. Revoking on change AND on unmount covers both paths.
+  */
+  useEffect(() => {
+    return () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    };
+  }, [photoPreview]);
 
   // Auto-fill latitude & longitude from position prop
   useEffect(() => {
@@ -32,11 +56,51 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     });
   };
 
-  const handleFileChange = (e) => {
-    setFormData({
-      ...formData,
-      photo: e.target.files[0],
+  /*
+  Single place that accepts a File, whether it arrived via the file picker or a drop.
+  Validation happens here rather than only on submit so a wrong file is rejected the moment
+  it's chosen, next to the control — instead of after the user has filled in the whole form
+  and hit Add. Type is re-checked even though the input has `accept=`, because `accept` only
+  filters the picker dialog; it doesn't apply to drag-and-drop at all.
+  */
+  const acceptPhoto = (file) => {
+    if (!file) return;
+
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setPhotoError("That file type isn't supported. Use PNG or JPEG.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError(`That image is ${formatBytes(file.size)}. Maximum is ${formatBytes(MAX_PHOTO_BYTES)}.`);
+      return;
+    }
+
+    setPhotoError("");
+    setPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
     });
+    setFormData((prev) => ({ ...prev, photo: file }));
+  };
+
+  const handleFileChange = (e) => acceptPhoto(e.target.files[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    acceptPhoto(e.dataTransfer.files?.[0]);
+  };
+
+  const clearPhoto = () => {
+    setPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setFormData((prev) => ({ ...prev, photo: null }));
+    setPhotoError("");
+    // Reset the native input too, or re-picking the SAME file fires no change event
+    // (the value is unchanged) and the photo would appear not to come back.
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // Reverse geocode function
@@ -105,8 +169,13 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Inline error instead of alert(): a native alert is modal, dismissible only by
+    // clicking OK, and appears detached from the field that caused it. Also, `required`
+    // was removed from the (now visually hidden) input — a hidden required control makes
+    // the browser refuse to submit with an unfocusable-control error rather than showing
+    // a useful message, so validation is owned here instead.
     if (!formData.photo) {
-      alert("Please select a photo.");
+      setPhotoError("Add a photo to save this memory.");
       return;
     }
 
@@ -159,8 +228,13 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
 
   return (
     <div className="fixed z-[999] inset-0 backdrop-blur-[10px] bg-dborderColor/50 flex items-center justify-center p-4">
-      <div className="rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto scrollbar-custom overflow-hidden">
-        <div className="p-6 bg-main dark:bg-dlightMain">
+      {/* rounded-xl + overflow-hidden on the OUTER box so the rounded corners clip the
+          scrolling content; the inner div owns the scroll. Previously both overflow-y-auto
+          and overflow-hidden sat on the same element — the y-axis still scrolled (the
+          later rule wins) but it's ambiguous, and the scrollbar rendered against a square
+          corner. Splitting the two responsibilities makes it explicit. */}
+      <div className="rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-6 bg-main dark:bg-dlightMain overflow-y-auto custom-scrollbar">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-txt dark:text-dtxt">
               Add New Memory
@@ -186,7 +260,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 onChange={handleChange}
                 required
                 placeholder="Beach Sunset"
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
               />
             </div>
 
@@ -202,26 +276,84 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 required
                 rows="4"
                 placeholder="Start with what you saw, then what you did, and finally how it made you feel...."
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
               />
             </div>
 
-            {/* Photo Selection */}
+            {/* Photo Selection — dropzone.
+                The native <input type="file"> is kept in the DOM (it's still what actually
+                holds the file and opens the picker) but visually hidden via sr-only rather
+                than `hidden`/`display:none`, because a display:none input can't receive
+                focus — which breaks keyboard access and browser validation messages.
+                The <label> is the visible target: clicking or pressing Enter/Space on it
+                activates the input natively, no JS click-forwarding needed. */}
             <div>
-              <label className="block text-sm font-medium text-lightTxt dark:text-dlightTxt mb-1">
-                Upload Photo
+              <label
+                htmlFor="photo-upload"
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={`relative flex flex-col items-center justify-center w-full rounded-xl
+                            border-2 border-dashed cursor-pointer transition-colors
+                            ${photoPreview ? "p-3" : "px-4 py-8"}
+                            ${isDragging
+                              ? "border-dpinkMain bg-dpinkMain/10"
+                              : "border-borderColor dark:border-dborderColor hover:border-dpinkMain/60"}`}
+              >
+                {photoPreview ? (
+                  <div className="w-full flex items-center gap-3">
+                    <img
+                      src={photoPreview}
+                      alt=""
+                      className="w-20 h-20 rounded-lg object-cover shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-txt dark:text-dtxt truncate">
+                        {formData.photo?.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formData.photo && formatBytes(formData.photo.size)} · Click to replace
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      // stopPropagation: this button sits inside the <label>, so without it
+                      // the click would also activate the file input and reopen the picker.
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); clearPhoto(); }}
+                      aria-label="Remove photo"
+                      className="shrink-0 p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition"
+                    >
+                      <XIcon size={18} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <ImagePlus className="text-gray-400 mb-2" size={28} />
+                    <p className="text-sm font-medium text-txt dark:text-dtxt">
+                      Drop a photo here, or <span className="text-transparent bg-clip-text bg-gradient-main font-semibold">browse</span>
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      PNG or JPEG, up to {formatBytes(MAX_PHOTO_BYTES)}
+                    </p>
+                  </>
+                )}
+
+                <input
+                  id="photo-upload"
+                  ref={fileInputRef}
+                  type="file"
+                  name="photo"
+                  accept="image/png, image/jpeg, image/jpg"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
               </label>
-              <input
-                type="file"
-                name="photo"
-                accept="image/png, image/jpeg, image/jpg"
-                onChange={handleFileChange}
-                required
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Supported: PNG, JPEG, JPG.
-              </p>
+
+              {photoError && (
+                <p role="alert" className="text-xs text-red-500 mt-2">
+                  {photoError}
+                </p>
+              )}
             </div>
 
             {/* Address + Auto Address Button */}
@@ -232,7 +364,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
                 value={formData.address}
                 onChange={handleChange}
                 placeholder="Santa Monica Beach, CA"
-                className="dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
               />
               <button
                 type="button"

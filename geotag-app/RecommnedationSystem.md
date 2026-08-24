@@ -36,6 +36,10 @@ Project files where this is used:
 6. Added request diagnostics logging for stream counts and fallback reasons.
 7. Improved niche detection in passive mode with adaptive clustering and recent-interest profile anchor.
 
+*Update (2026-08-19): item 2's retry-based background generation was replaced by a BullMQ
+job queue — see "Embedding Lifecycle" below. Left here as an accurate record of what Phase
+1 actually shipped at the time, not corrected in place.*
+
 ### Phase 2 (Planned)
 
 1. Persistent user niche profile storage.
@@ -115,14 +119,20 @@ If hybrid result is empty:
 
 ## Embedding Lifecycle
 
-Embeddings are generated asynchronously to keep write latency low:
+Embeddings are generated asynchronously to keep write latency low, via a BullMQ job queue
+(Redis-backed) rather than an in-process fire-and-forget call:
 
 1. On memory create:
 	- API responds immediately after save.
-	- Embedding generation runs in background.
+	- A job is enqueued (`server/queues/embeddingQueue.js`) carrying the memory id and text.
 2. On memory edit (title/description changed):
 	- API responds immediately.
-	- Embedding regeneration runs in background.
+	- Same queue, a new job with the updated text.
+3. A worker (`server/workers/embeddingWorker.js`), running in the same process as the API
+	for now, consumes jobs and writes the embedding back onto the `Memory` document.
+	Failed jobs retry automatically (4 attempts, exponential backoff) — this is BullMQ's
+	job now, not a hand-rolled retry loop, so a job also survives a server restart mid-
+	generation instead of silently vanishing with the process.
 
 Embedding model:
 
@@ -198,6 +208,13 @@ This rule is applied after joining memory with user document.
 
 1. Replace interleaving with explicit scoring and weighted blending.
 2. Add interaction recency decay weighting.
-3. Cache per-user target vectors for short intervals.
+3. Cache per-user target vectors for short intervals. *(Update 2026-08-19: the cache-aside
+   mechanism this needs now exists — `server/utils/cache.js`, currently proven on
+   `GET /api/users/:id`. This item is "compute the centroids, call `getOrSetCache`," not
+   "build a caching layer." See the README's §3 Redis section.)*
 4. Add metrics logging (CTR, dwell, save, like) for online evaluation.
-5. Backfill embeddings for old memories via batch job.
+5. Backfill embeddings for old memories via batch job. *(Update 2026-08-19: a real job
+   queue now exists — `server/queues/embeddingQueue.js` — built for per-memory jobs on
+   create/edit, but the same `enqueueEmbeddingJob` call works from a one-off script over
+   `Memory.find({ embedding: { $exists: false } })`. Infra's there; the backfill script
+   itself isn't written yet.)*

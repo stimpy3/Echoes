@@ -56,8 +56,9 @@ const ChatSectionPage = ({
       clearTimeout(typingTimeoutRef.current);
     }
 
+    const tempId = Date.now();
     const optimisticMessage = {
-      _id: Date.now(),
+      _id: tempId,
       text,
       isOwn: true,
       createdAt: new Date(),
@@ -65,28 +66,38 @@ const ChatSectionPage = ({
 
     setMessages(prev => [...prev, optimisticMessage]);
 
-    socket.emit("sendMessage", {
-      message: text,
-      chatId,
-      receiverId,
-    });
+    /*
+    Persistence and delivery now happen together, server-side, in the socket handler —
+    see server/socket/index.js. There is no longer a parallel axios.post: that call and
+    this emit used to race, and a failure in the axios call meant the recipient had
+    already been shown (via the emit, which never touched the database) a message that
+    didn't actually exist. One path now, not two.
 
-    console.log("FRONTEND SENT:", { message: text, chatId, receiverId });
+    socket.timeout(8000) turns the ack into a real request/response: the callback fires
+    either with the server's response, or with `err` set if 8s pass with no response
+    (server down, connection dropped mid-request, etc.) — without a timeout, a lost
+    connection would leave this optimistic bubble stuck forever with no rollback.
+    */
+    socket.timeout(8000).emit(
+      "sendMessage",
+      { message: text, chatId, receiverId },
+      (err, response) => {
+        if (err || !response?.success) {
+          // Send failed or timed out — the optimistic bubble was never real, remove it.
+          setMessages(prev => prev.filter(msg => msg._id !== tempId));
+          console.error("Error sending message:", err || response?.error);
+          return;
+        }
 
-    try {
-      await axios.post(
-        `${BASE_URL}/api/messages/sendmessage`,
-        {
-          receiver: receiverId,
-          text
-        },
-        { withCredentials: true }
-      );
-      refreshChats();
-    } catch (err) {
-      console.error("Error sending message:", err);
-      setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
-    }
+        // Swap the temporary optimistic entry for the real, persisted message — same
+        // position in the list, now carrying the actual _id and createdAt from Mongo
+        // instead of a client-generated placeholder.
+        setMessages(prev =>
+          prev.map(msg => (msg._id === tempId ? { ...response.message, isOwn: true } : msg))
+        );
+        refreshChats();
+      }
+    );
   };
 
   const handleKeyDown = (e) => {
@@ -213,7 +224,7 @@ const ChatSectionPage = ({
       {/* Messages */}
       <div
         ref={messagesContainerRef}
-        className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto scrollbar-custom"
+        className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto custom-scrollbar"
       >
         {messages.map((msg, idx) => {
           const prevMsg = messages[idx - 1];

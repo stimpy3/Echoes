@@ -17,6 +17,9 @@ const Signup = ({ onSwitchToLogin }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  //false until Google's script has actually rendered its button into #googleBtn
+  const [googleReady, setGoogleReady] = useState(false);
+  const googleWrapRef = useRef(null);
   const [formData, setFormData] = useState({ 
     name: '',
     email: '',
@@ -149,12 +152,22 @@ const handleAnimationComplete = useCallback(() => {
 especially after a refresh or fast route switch.
 That’s why the Google button sometimes disappears.  thats why the setTimeout*/
   useEffect(() => {
+  let cancelled = false;
+  let retryId;
+
   const initializeGoogleButton = () => {
+    if (cancelled) return;
+
     if (window.google && document.getElementById("googleBtn")) {
       google.accounts.id.initialize({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         callback: handleCredentialResponse,
       });
+
+      //width must be a pixel NUMBER — GIS ignores strings like "100%" — and it
+      //hard-caps at 400, so measuring a wider wrapper would just get clamped anyway.
+      const wrapWidth = googleWrapRef.current?.offsetWidth || 400;
+      const buttonWidth = Math.min(400, Math.max(200, Math.round(wrapWidth)));
 
       google.accounts.id.renderButton(
         document.getElementById("googleBtn"),
@@ -163,16 +176,29 @@ That’s why the Google button sometimes disappears.  thats why the setTimeout*/
           size: "large",
           text: "continue_with",
           shape: "rectangular",
-          width: "100%",
+          width: buttonWidth,
+          //GIS defaults to "left": icon pinned to the edge, label centered across
+          //the FULL width — that's what was stranding them apart on a wide button.
+          //"center" groups icon+label as one block and centers that block instead.
+          logo_alignment: "center",
         }
       );
+
+      //the real button now exists, so the placeholder can step aside
+      setGoogleReady(true);
     } else {
       // Retry after a short delay if google object isn’t loaded yet
-      setTimeout(initializeGoogleButton, 300);
+      retryId = setTimeout(initializeGoogleButton, 300);
     }
   };
 
   initializeGoogleButton();
+
+  //stop the retry loop if the user navigates away mid-wait
+  return () => {
+    cancelled = true;
+    clearTimeout(retryId);
+  };
 }, []);
 
 
@@ -350,7 +376,7 @@ That’s why the Google button sometimes disappears.  thats why the setTimeout*/
               >
                 {showPassword ? <Eye /> : <EyeOff />}
               </button>
-            </div> 
+            </div>
           </div>
 
           </div>
@@ -371,9 +397,35 @@ That’s why the Google button sometimes disappears.  thats why the setTimeout*/
             <div className="h-[1px] bg-gray-300 w-full"></div>
           </div>
 
-           {/* Google button */}
+           {/* Google button.
+               Google's script renders the real button into #googleBtn, which can take a
+               moment. Until it does, #googleBtn is `invisible` (visibility:hidden — it
+               still occupies its box, so the width measurement above stays correct) and
+               the placeholder shows in its place. They are never both visible at once:
+               a translucent overlay sitting on a live button reads as flickering.
+               The placeholder copies GIS's own "outline / continue_with" layout: the
+               G is pinned near the left edge, the label is centered across the FULL
+               width (not just the space next to the icon) — that's what makes a wide
+               Google button look right instead of lopsided. */}
            <div className="flex justify-center w-full">
-             <div id="googleBtn" className="w-full flex justify-center"></div>
+             <div ref={googleWrapRef} className="relative h-[40px] w-full max-w-[400px]">
+               <div id="googleBtn" className={"w-full flex justify-center " + (googleReady ? "" : "invisible")}></div>
+
+               {!googleReady && (
+                 <div
+                   aria-hidden="true"
+                   className="absolute inset-0 flex items-center justify-center gap-[10px] rounded-[4px] border border-[#dadce0] bg-white cursor-not-allowed select-none"
+                 >
+                   <svg width="18" height="18" viewBox="0 0 48 48" className="shrink-0">
+                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                   </svg>
+                   <span className="text-[14px] font-medium text-gray-400">Continue with Google</span>
+                 </div>
+               )}
+             </div>
            </div>
 
           {/* Switch to Login */}

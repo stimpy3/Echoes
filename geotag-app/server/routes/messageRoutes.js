@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const verifyToken = require("../middleware/verifyToken");
-const Chat = require("../models/chat");
 const Message = require("../models/message");
 
 
@@ -18,44 +17,18 @@ router.get("/:chatId", verifyToken, async (req, res) => {
 
     res.json(completeMessages);
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'Error fetching messages');
     res.status(500).json({ message: "Server error" });
   }
 });
 
-
-// POST /sendmessage → send a message to a user
-router.post("/sendmessage", verifyToken, async (req, res) => {
-  try {
-    const senderId = req.userId;
-    const { receiver, text } = req.body;
-
-    if (!receiver || !text) {
-      return res.status(400).json({ message: "Receiver and text are required" });
-    }
-
-    //Find existing chat
-    let chat = await Chat.findOne({ participants: { $all: [senderId, receiver] } });
-
-    //If no chat exists, create it
-    if (!chat) chat = await Chat.create({ participants: [senderId, receiver] });
-
-    // Create the message
-    await Message.create({ chatId: chat._id, sender: senderId, text });
-
-    //Update chat
-    chat.lastMessage = text;
-    chat.updatedAt = new Date();
-    chat.unreadCount.set(receiver, (chat.unreadCount.get(receiver) || 0) + 1);
-    await chat.save();
-
-    //Return success status
-    res.status(201).json({ success: true });
-
-  } catch (err) {
-    console.error("Error sending message:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+/*
+POST /sendmessage was removed — its logic (find-or-create Chat, create Message, update
+lastMessage/unreadCount) moved into the Socket.IO `sendMessage` handler (server/socket/
+index.js), which now does persist-then-emit instead of the client firing this endpoint
+AND a socket broadcast in parallel. Leaving this route mounted would have recreated the
+same dual-write hazard through a second caller — one place creates messages now, not two
+racing each other. This file keeps only the GET history route.
+*/
 
 module.exports = router;

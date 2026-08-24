@@ -1,4 +1,4 @@
-import { MapPin, Calendar, Heart, Pencil, Trash, Send } from 'lucide-react';
+import { MapPin, Calendar, Heart, Pencil, Trash, Send, X } from 'lucide-react';
 import axios from 'axios';
 import { useState, useEffect } from 'react';
 
@@ -92,7 +92,42 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
     });
   };
 
-  if (!memory) return null;
+  // Escape to close — the modal previously only closed by clicking the backdrop, which on
+  // mobile is a p-4 sliver around the edges and easy to miss entirely.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  /*
+  `memory.userId` is POPULATED by GET /api/memory/single/:id (.populate('userId', ...)),
+  so it's an object like { _id, name, profilePic } — not an id string.
+
+  The old check was `currentUserId === memory.userId`, comparing a string to an object,
+  which is always false. That meant the Edit and Delete buttons never rendered, even on
+  your own memories. Comparing against ._id (and stringifying, since ObjectIds serialize
+  to strings over JSON but it costs nothing to be explicit) is the actual test.
+  */
+  const isOwner =
+    !!memory && String(memory.userId?._id ?? memory.userId) === String(currentUserId);
+
+  // Skeleton rather than `return null` — clicking a post used to render nothing at all
+  // until the fetch resolved, so on a slow connection the click appeared to do nothing.
+  if (!memory) {
+    return (
+      <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 md:p-6">
+        <div className="w-full max-w-6xl h-[90vh] md:h-[85vh] rounded-2xl overflow-hidden flex flex-col md:flex-row bg-lightMain dark:bg-dlightMain">
+          <div className="w-full md:w-1/2 h-[40%] md:h-full bg-black/20 dark:bg-white/5 animate-pulse" />
+          <div className="w-full md:w-1/2 p-6 space-y-4">
+            <div className="h-8 w-2/3 rounded-lg bg-black/10 dark:bg-white/10 animate-pulse" />
+            <div className="h-24 w-full rounded-xl bg-black/10 dark:bg-white/10 animate-pulse" />
+            <div className="h-4 w-1/2 rounded bg-black/10 dark:bg-white/10 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -103,17 +138,44 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
         className="relative bg-lightMain dark:bg-dlightMain w-full max-w-6xl h-[90vh] md:h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left Side: Image */}
-        <div className="w-full md:w-1/2 h-[40%] md:h-full relative bg-black flex items-center justify-center border-b md:border-b-0 md:border-r border-dborderColor dark:border-borderColor">
+        {/* Left Side: Image.
+
+            The blank space: `object-contain` preserves the photo's aspect ratio, so a
+            portrait photo in this landscape-ish half left thick black bars either side
+            (and a landscape one left them top and bottom). Switching to object-cover would
+            fill it but crop the photo — bad for a memory, where the framing is the point.
+
+            Instead the gap is filled with a blurred, over-scaled copy of the same image
+            behind the real one. The photo is still shown complete and uncropped; the dead
+            space becomes an ambient wash of its own colours. scale-110 hides the soft
+            transparent edges blur leaves behind. */}
+        <div className="w-full md:w-1/2 h-[45%] md:h-full relative overflow-hidden bg-black flex items-center justify-center border-b md:border-b-0 md:border-r border-dborderColor dark:border-borderColor">
+          <img
+            src={memory.photoUrl}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-50"
+          />
           <img
             src={memory.photoUrl}
             alt={memory.title}
-            className="w-full h-full object-contain"
+            className="relative z-10 w-full h-full object-contain"
           />
+
+          {/* Close button — there wasn't one. Backdrop-click was the only way out, and on
+              mobile that's a 16px border around the sheet. */}
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute z-20 top-3 right-3 p-2 rounded-full bg-black/50 text-white backdrop-blur-md
+                       hover:bg-black/70 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Right Side: Details & Comments */}
-        <div className="w-full md:w-1/2 flex flex-col h-[60%] md:h-full">
+        <div className="w-full md:w-1/2 flex flex-col h-[55%] md:h-full">
           {/* Scrollable details and comments */}
           <div className="p-4 md:p-6 overflow-y-auto flex-1 custom-scrollbar">
             {isEditing ? (
@@ -137,22 +199,65 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
               </div>
             ) : (
               <>
-                <h2 className="text-2xl md:text-3xl font-black text-txt dark:text-dtxt mb-4">{memory.title}</h2>
-                <p className="text-lightTxt dark:text-dlightTxt text-base md:text-lg mb-6 leading-relaxed bg-main/5 dark:bg-dmain/5 p-4 rounded-xl border-l-4 border-main dark:border-dmain">
+                {/* Author — the API already populates userId with name + profilePic, but
+                    the modal never showed who posted it. Obvious from your own profile,
+                    not obvious at all when the same modal opens from Explore. */}
+                {memory.userId?.name && (
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className="w-9 h-9 rounded-full overflow-hidden bg-black/10 dark:bg-white/10 shrink-0">
+                      {memory.userId.profilePic ? (
+                        <img src={memory.userId.profilePic} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-sm font-bold uppercase text-txt dark:text-dtxt">
+                          {memory.userId.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-sm font-semibold text-txt dark:text-dtxt">
+                      {memory.userId.name}
+                    </span>
+                  </div>
+                )}
+
+                <h2 className="text-2xl md:text-3xl font-black text-txt dark:text-dtxt mb-4 leading-tight">
+                  {memory.title}
+                </h2>
+
+                {/* The accent bar and background here were previously `border-main` /
+                    `bg-main/5` — and `main` is literally `white`. White-on-light in light
+                    mode, and `dark:border-dmain` is black-on-#222 in dark mode, so this
+                    card was invisible in BOTH themes. Neutral tint + the app's accent
+                    colour makes it actually read as a quote block. */}
+                <p className="text-lightTxt dark:text-dlightTxt text-base md:text-lg mb-6 leading-relaxed bg-black/[0.03] dark:bg-white/[0.04] p-4 rounded-xl border-l-4 border-accentMain whitespace-pre-wrap">
                   {memory.description}
                 </p>
               </>
             )}
 
-            <div className="flex items-center gap-4 text-sm text-txt/60 dark:text-dtxt/60 mb-6">
-              <span className="flex items-center gap-1"><MapPin size={16} />{memory.location?.address}</span>
-              <span className="flex items-center gap-1"><Calendar size={16} />{formatDate(memory.createdAt)}</span>
+            {/* flex-wrap + items-start + shrink-0 icons: a long address previously forced
+                this row to overflow, squashing the date off the edge. Now it wraps. */}
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2 text-sm text-txt/60 dark:text-dtxt/60 mb-6">
+              {memory.location?.address && (
+                <span className="flex items-start gap-1.5 min-w-0">
+                  <MapPin size={16} className="shrink-0 mt-0.5" />
+                  <span className="break-words">{memory.location.address}</span>
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 shrink-0">
+                <Calendar size={16} className="shrink-0" />
+                {formatDate(memory.createdAt)}
+              </span>
             </div>
 
             {/* Comments Section */}
             <div>
-              <h3 className="text-lg font-bold text-txt dark:text-dtxt mb-4 opacity-70 border-b border-dborderColor dark:border-borderColor pb-2">
+              <h3 className="text-lg font-bold text-txt dark:text-dtxt mb-4 opacity-70 border-b border-black/10 dark:border-white/10 pb-2">
                 Comments
+                {memory.comments?.length > 0 && (
+                  <span className="ml-2 text-sm font-medium opacity-60">
+                    {memory.comments.length}
+                  </span>
+                )}
               </h3>
               <div className="space-y-4">
                 {memory.comments?.length > 0 ? (
@@ -167,12 +272,19 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 bg-dborderColor/10 dark:bg-borderColor/10 p-3 rounded-2xl rounded-tl-none">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-main">{comment.userId?.name}</span>
-                          <span className="text-[10px] opacity-40">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                      <div className="flex-1 min-w-0 bg-black/[0.04] dark:bg-white/[0.06] p-3 rounded-2xl rounded-tl-none">
+                        <div className="flex justify-between items-center gap-2 mb-1">
+                          {/* Was `text-main` — and `main` is `white`, so comment author
+                              names rendered white on a near-white bubble in light mode:
+                              invisible. Uses the normal text token now. */}
+                          <span className="text-xs font-bold text-txt dark:text-dtxt truncate">
+                            {comment.userId?.name}
+                          </span>
+                          <span className="text-[10px] opacity-40 shrink-0">
+                            {new Date(comment.createdAt).toLocaleDateString()}
+                          </span>
                         </div>
-                        <p className="text-sm text-txt dark:text-dtxt">{comment.text}</p>
+                        <p className="text-sm text-txt dark:text-dtxt break-words">{comment.text}</p>
                       </div>
                     </div>
                   ))
@@ -184,21 +296,46 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
           </div>
 
           {/* Action Bar */}
-          <div className="p-4 border-t border-dborderColor dark:border-borderColor bg-lightMain dark:bg-dlightMain flex flex-col gap-3">
+          <div className="p-4 border-t border-black/10 dark:border-white/10 bg-lightMain dark:bg-dlightMain flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <button onClick={handleLike} className="flex items-center gap-1 group">
-                  <Heart size={26} className={likes.includes(currentUserId) ? "fill-red-500 text-red-500" : "text-txt dark:text-dtxt group-hover:scale-110 transition"} />
+                <button
+                  onClick={handleLike}
+                  aria-label={likes.includes(currentUserId) ? "Unlike" : "Like"}
+                  aria-pressed={likes.includes(currentUserId)}
+                  className="flex items-center gap-1.5 group"
+                >
+                  <Heart
+                    size={26}
+                    className={`transition ${likes.includes(currentUserId)
+                      ? "fill-red-500 text-red-500"
+                      : "text-txt dark:text-dtxt group-hover:scale-110"}`}
+                  />
                   <span className="text-txt dark:text-dtxt font-semibold text-lg">{likes.length}</span>
                 </button>
               </div>
 
-              {/* Edit / Delete mapping */}
+              {/* Edit / Delete — gated on `isOwner`, which compares against
+                  memory.userId._id. The previous `currentUserId === memory.userId` compared
+                  a string to the populated user OBJECT, so it was always false and these
+                  never rendered on your own memories. */}
               <div className="flex items-center gap-2">
-                {currentUserId === memory.userId && !isEditing && (
+                {isOwner && !isEditing && (
                   <>
-                    <button onClick={() => setIsEditing(true)} className="text-blue-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition"><Pencil size={20} /></button>
-                    <button onClick={handleDelete} className="text-red-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition"><Trash size={20} /></button>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      aria-label="Edit memory"
+                      className="text-blue-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    >
+                      <Pencil size={20} />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      aria-label="Delete memory"
+                      className="text-red-500 p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    >
+                      <Trash size={20} />
+                    </button>
                   </>
                 )}
               </div>
@@ -210,12 +347,16 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
                 placeholder="Add a comment..."
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                className="flex-1 bg-dborderColor/10 dark:bg-borderColor/10 border border-transparent focus:border-main rounded-full px-4 py-2 text-sm focus:outline-none text-txt dark:text-dtxt"
+                className="flex-1 min-w-0 bg-black/[0.04] dark:bg-white/[0.06] border border-transparent
+                           focus:outline-none focus-visible:border-accentMain rounded-full px-4 py-2 text-sm
+                           text-txt dark:text-dtxt placeholder:text-txt/40 dark:placeholder:text-dtxt/40"
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={commenting || !newComment.trim()}
-                className="bg-main dark:bg-dmain text-txt dark:text-dtxt p-2 rounded-full hover:scale-105 transition disabled:opacity-30"
+                aria-label="Post comment"
+                className="shrink-0 bg-gradient-mainBright text-white p-2.5 rounded-full hover:brightness-110
+                           transition disabled:opacity-30 disabled:hover:brightness-100"
               >
                 <Send size={18} />
               </button>

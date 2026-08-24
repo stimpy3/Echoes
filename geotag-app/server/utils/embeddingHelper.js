@@ -1,4 +1,5 @@
 const { pipeline } = require('@huggingface/transformers');
+const logger = require('./logger');
 
 let extractor = null;
 
@@ -26,7 +27,7 @@ async function generateEmbedding(text) {
         // Convert the tensor to a plain JavaScript array
         return Array.from(output.data);
     } catch (error) {
-        console.error('Error generating embedding:', error);
+        logger.error({ err: error }, 'Error generating embedding');
         return null;
     }
 }
@@ -171,9 +172,9 @@ function kMeansCluster(embeddings, k = 3, maxIterations = 10) {
 
 // Pre-load the model immediately on server start so it's ready for the first request
 getExtractor().then(() => {
-    console.log("✅ AI Embedding Model loaded and ready!");
+    logger.info('AI Embedding Model loaded and ready');
 }).catch(err => {
-    console.error("❌ Failed to pre-load embedding model:", err);
+    logger.error({ err }, 'Failed to pre-load embedding model');
 });
 
 module.exports = {

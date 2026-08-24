@@ -1,3 +1,31 @@
+require('dotenv').config(); // loads .env variables — must run before anything below reads process.env
+//But for local development or manual setups, it’s essential.
+
+/*
+Confirmed root cause (2026-08-18), local dev machine only: on Windows here, Node's own
+DNS resolver (c-ares) was getting ECONNREFUSED on the `_mongodb._tcp.*` SRV lookup that
+Atlas's mongodb+srv:// URI needs — instantly, not a timeout — while Windows' own resolver
+(nslookup) answered the same query fine. Node doesn't share Windows' resolver; c-ares
+does its own DNS server discovery, and on this machine it was picking something that
+refuses SRV queries (common with VPN clients, Docker Desktop/WSL, or a virtual adapter).
+Pointing it at 8.8.8.8/1.1.1.1 explicitly bypasses whatever it was auto-selecting.
+
+Gated to non-production: Render's containers have never shown this symptom, and forcing
+an external resolver on a host that expects you to use its own internal one (a real
+policy on some providers) would trade a fixed local bug for a hypothetical prod one.
+ipv4first is left ungated — it's a preference, not a hard override, so it's low-risk
+everywhere: on a network where IPv6 is advertised but not actually routed, Node would
+try that address first, get no response at all (not a rejection — a black hole), and
+only fall back to IPv4 after its own internal timeout.
+
+Must run before anything else requires DNS — hence top of file, before any other require().
+*/
+const dns = require('dns');
+if (process.env.NODE_ENV !== 'production') {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+}
+dns.setDefaultResultOrder('ipv4first');
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -5,10 +33,14 @@ const mongoose = require('mongoose');
 const { applyTimestamps } = require('./models/users');
 const http = require('http');
 const { Server } = require('socket.io');
-require('dotenv').config(); // loads .env variables
-//But for local development or manual setups, it’s essential.
+const { createAdapter } = require('@socket.io/redis-adapter');
+const jwt = require('jsonwebtoken');
+const { createClient: createRedisClient } = require('./utils/redisClient');
 
-const authRoutes = require('./routes/authRoutes'); 
+const pinoHttp = require('pino-http');
+const logger = require('./utils/logger');
+
+const authRoutes = require('./routes/authRoutes');
 const navbarRoutes = require('./routes/navbarRoutes'); 
 const locationRoutes = require('./routes/locationRoutes'); 
 const memoryRoutes = require('./routes/memoryRoutes');
@@ -32,6 +64,17 @@ Basically, app is your entire backend bundled in one variable.
 If Express was a car, express() is like turning the key — app is now the car you can drive.*/
 
 //MIDDLEWARE SETUP-----------------------
+/*
+First middleware, before even CORS — request logging should see everything from arrival.
+pino-http auto-generates a request id and attaches a CHILD logger as req.log with that id
+already bound into every field it logs, so `req.log.info('...')` anywhere downstream (route
+handlers, the Explore diagnostics below) automatically carries the same id as every other
+log line from that request. It also logs one summary line per request on its own (method,
+url, status, response time) with zero code in any route — that alone answers "was /explore
+slow, and for whom" without hand-instrumenting anything.
+*/
+app.use(pinoHttp({ logger }));
+
 //app.use(...)  // Tells Express to run this middleware function for every request
 //no explicit next() required becaause its inbuilt in cors()
 const allowedOrigins = [
@@ -88,8 +131,8 @@ const MONGO_URI =
   process.env.MONGO_URI ||
   "mongodb://localhost:27017/echoes";
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.log(err));
+  .then(() => logger.info('MongoDB connected'))
+  .catch(err => logger.error({ err }, 'MongoDB connection error'));
 /*in async await format
 const connectDB = async () => {
   try {
@@ -143,13 +186,76 @@ const io = new Server(server, {
   }
 });
 
-/*require("./socket/index") returns a function 
+/*
+Fixes the actual scaling bug: socket/index.js used to keep `onlineUsers` as a plain
+in-process object. That works with exactly one server instance. Run two behind a load
+balancer and a message from a user connected to instance A can never reach a recipient
+whose socket is on instance B — io.to(socketId).emit() only ever looks in its own
+process's memory. Silent message loss, not a crash, which is the worse kind of bug.
+
+The Redis adapter fixes this by making every instance publish socket events to Redis
+and subscribe to what every OTHER instance publishes, so io.to()/emit() work the same
+whether the target socket is local or on a different machine entirely. Two connections
+are required (not one) because pub/sub connections can't also run pull request/response
+commands — .duplicate() clones the first client's connection options for the second one.
+*/
+const pubClient = createRedisClient();
+const subClient = pubClient.duplicate();
+io.adapter(createAdapter(pubClient, subClient));
+
+/*
+Authenticate the handshake BEFORE any socket event handler runs.
+
+io.use() is the Socket.IO equivalent of app.use() — it runs once per connection attempt,
+and calling next(err) rejects the connection instead of letting it through.
+
+Why this is needed: the client used to just *tell* us who it was (socket.handshake.auth.userId),
+and the server believed it. Anyone could open a socket claiming another user's id and receive
+their live messages. Here we instead read the same httpOnly `token` cookie the REST API uses
+(verifyToken.js) and derive the id from the signed JWT, which the client cannot forge.
+
+The cookie rides along automatically because the client sets withCredentials: true.
+*/
+io.use((socket, next) => {
+  //handshake.headers.cookie is the raw header string: "token=abc; theme=dark"
+  const cookieHeader = socket.handshake.headers.cookie || '';
+
+  const token = cookieHeader
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.startsWith('token='))
+    ?.slice('token='.length);
+
+  if (!token) {
+    return next(new Error('unauthorized'));
+  }
+
+  jwt.verify(decodeURIComponent(token), process.env.JWT_SECRET, (err, decoded) => {
+    if (err) return next(new Error('unauthorized'));
+
+    //socket.userId is now trusted, the same way req.userId is in verifyToken.js
+    socket.userId = decoded.id;
+    next();
+  });
+});
+
+/*require("./socket/index") returns a function
 (because in your socket/index.js you did module.exports = (io) => { ... })
 By adding (io), you immediately call that function and pass io to it*/
 require("./socket/index")(io);
 
+/*
+Starts processing embedding jobs in THIS process — requiring the file is enough, a BullMQ
+Worker begins consuming as soon as it's constructed, no separate .start() call. This is a
+deliberate choice for a single Render instance: a dedicated worker dyno is real infra
+(another deployed service, another thing that can be down) that this app's job volume
+doesn't currently justify. If it ever does, this line moves to its own entry point and
+nothing about the queue or worker's own code has to change.
+*/
+require("./workers/embeddingWorker");
+
 server.listen(process.env.PORT || 5000, () => {
-  console.log("Server running");
+  logger.info({ port: process.env.PORT || 5000 }, 'Server running');
 });
 /*app.listen(5000, ...)→ Starts the server on port 5000
 () => { ... } → This is a callback function that runs once the server starts successfully.

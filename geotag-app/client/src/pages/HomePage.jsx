@@ -1,4 +1,4 @@
-import { Locate,Layers2,X } from "lucide-react";
+import { Locate, Layers2, X, Plus } from "lucide-react";
 import React, { useState,useEffect } from "react";
 import MapView from "../components/Map/MapView";
 
@@ -12,6 +12,26 @@ import ShinyText from '../components/Layout/ShinyText';
 import { useNavigate } from 'react-router-dom';
 
 import axios from "axios";
+
+/*
+Shared appearance for the floating map controls, so the set stays visually consistent —
+previously each button re-declared its own size, shadow and background, which is how they
+drifted into three different treatments.
+
+Split into base + state so only the *background* varies between them; size, shape, shadow,
+border width, transition and focus ring are identical for every control in the stack.
+*/
+const mapControlBtn =
+  "w-[50px] aspect-square rounded-full grid place-content-center border-[1px] " +
+  "shadow-lg transition-all duration-200 active:scale-95 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentMain focus-visible:ring-offset-2";
+
+const mapControlBtnIdle =
+  "bg-main dark:bg-dlightMain text-txt dark:text-dtxt " +
+  "border-borderColor dark:border-dborderColor hover:bg-lightMain dark:hover:bg-dlightMain2";
+
+const mapControlBtnActive =
+  "bg-dmain dark:bg-main text-white dark:text-black border-transparent";
 
 const HomePage = () => {
   const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
@@ -140,66 +160,91 @@ const fetchFollowing = async () => {
         <div className="h-[30px] bg-[linear-gradient(to_top,theme(colors.fadeColor)_10%,transparent_100%)] 
           dark:bg-[linear-gradient(to_top,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[900] bottom-[0px] py-[5px] left-0 right-0 px-[20px]"></div>
 
-       {addingMode && (
-         <button
-           onClick={() => {
-             if (!navigator.geolocation) {
-               alert("Geolocation is not supported by your browser.");
-               return;
-             }
-       
-             navigator.geolocation.getCurrentPosition(
-               (pos) => {
-                 const { latitude, longitude } = pos.coords;
-                 const latlng = { lat: latitude, lng: longitude };
-                 setSelectedPosition(latlng);
-                 setShowForm(true);
-                 setAddingMode(false);
-               },
-               (err) => {
-                 if (err.code === 1) {
-                   alert(
-                     "Location access denied. Please enable location permission for this website in your browser settings."
-                   );
-                 } else if (err.code === 2) {
-                   alert("Location unavailable. Try again in a few seconds.");
-                 } else {
-                   alert("Failed to get location. Please try again.");
-                 }
-               },
-               { enableHighAccuracy: true, timeout: 10000 }
-             );
-           }}
-           className="absolute w-[50px] aspect-square bottom-[20px] left-[80px] bg-dborderColor text-dtxt text-[2rem] grid place-content-center rounded-full shadow-md hover:bg-dlightMain2 transition-all z-[1000]"
-           title="Add memory at your current location"
-         >
-           <Locate />
-         </button>
-       )}
+        {/*
+          Map control stack.
 
-        <div className="w-fit h-fit flex-col bottom-[20px] left-[20px] absolute z-[1000] "> 
-           
-             {/* 🔹 Overlay Button */}
-           <button onClick={()=>{toggleFollowingList();fetchFollowing();}} className=" text-dtxt bg-dlightMain border-[1px] dark:border-dborderColor border-borderColor mb-[10px] dark:text-dtxt w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full">
-              <Layers2/>
-           </button>
-           
-           {/* 🔹 Add / Cancel Button */}
-           <button
-             onClick={() => {
-               setAddingMode((prev) => !prev);
-               setSelectedPosition(null);
-             }}
-             className={`w-[50px] aspect-square shadow-xl grid place-content-center text-[2rem] rounded-full transition-all ${
-               addingMode
-                 ? "bg-red-500 rotate-45 text-white"
-                 : "bg-main text-txt"
-             }`}
-             title={addingMode ? "Cancel adding memory" : "Add new memory"}
-           >
-             +
-           </button>
-        </div> 
+          Previously these three buttons each had their own background treatment
+          (bg-dlightMain + border / bg-main no border / bg-dborderColor), and the Locate
+          button was positioned separately at left-[80px] while the other two stacked at
+          left-[20px] — so they read as three unrelated widgets rather than one set of
+          controls. Now they share a single `mapControlBtn` base, stack in one column, and
+          Locate joins the stack instead of floating beside it.
+
+          The add button's `+` was a literal text character at text-[2rem] while its
+          siblings were Lucide icons — different rendering path, so it never optically
+          aligned. It's the Lucide <Plus> now, and the rotate-45 trick that turns it into
+          an X still works because the icon rotates the same way the glyph did.
+        */}
+        <div className="absolute bottom-[20px] left-[20px] z-[1000] flex flex-col gap-[10px]">
+          {/* Friends' pins layer toggle */}
+          <button
+            onClick={() => { toggleFollowingList(); fetchFollowing(); }}
+            aria-label="Toggle friends' pins"
+            aria-expanded={followList}
+            className={`${mapControlBtn} ${followList ? mapControlBtnActive : mapControlBtnIdle}`}
+          >
+            <Layers2 size={22} />
+          </button>
+
+          {/* Use my current location — only meaningful while placing a memory, so it
+              appears with adding mode rather than being always-on. */}
+          {addingMode && (
+            <button
+              onClick={() => {
+                if (!navigator.geolocation) {
+                  alert("Geolocation is not supported by your browser.");
+                  return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    const latlng = { lat: latitude, lng: longitude };
+                    setSelectedPosition(latlng);
+                    setShowForm(true);
+                    setAddingMode(false);
+                  },
+                  (err) => {
+                    if (err.code === 1) {
+                      alert(
+                        "Location access denied. Please enable location permission for this website in your browser settings."
+                      );
+                    } else if (err.code === 2) {
+                      alert("Location unavailable. Try again in a few seconds.");
+                    } else {
+                      alert("Failed to get location. Please try again.");
+                    }
+                  },
+                  { enableHighAccuracy: true, timeout: 10000 }
+                );
+              }}
+              aria-label="Add memory at your current location"
+              title="Add memory at your current location"
+              className={`${mapControlBtn} ${mapControlBtnIdle}`}
+            >
+              <Locate size={22} />
+            </button>
+          )}
+
+          {/* Add / Cancel — the primary action, so it sits last (closest to the thumb on
+              mobile) and is the only one that gets the accent treatment. */}
+          <button
+            onClick={() => {
+              setAddingMode((prev) => !prev);
+              setSelectedPosition(null);
+            }}
+            aria-label={addingMode ? "Cancel adding memory" : "Add new memory"}
+            aria-pressed={addingMode}
+            title={addingMode ? "Cancel adding memory" : "Add new memory"}
+            className={`${mapControlBtn} ${
+              addingMode
+                ? "bg-red-500 text-white border-red-500 rotate-45"
+                : "bg-gradient-mainBright text-white border-transparent hover:brightness-110"
+            }`}
+          >
+            <Plus size={24} />
+          </button>
+        </div>
 
         {(followList)?
         <div className="absolute z-[1000] left-[80px] bottom-[80px] w-[200px] h-fit rounded-md overflow-hidden dark:bg-dlightMain bg-lightMain border-[1px] border-borderColor dark:border-dborderColor">
@@ -215,7 +260,7 @@ const fetchFollowing = async () => {
     </p>
   </section>
      ) : (
-  <section className="w-full h-fit max-h-[122px] overflow-y-auto scrollbar-custom">
+  <section className="w-full h-fit max-h-[122px] overflow-y-auto custom-scrollbar">
    {following.map((people) => ( 
   <div 
     key={people._id} 

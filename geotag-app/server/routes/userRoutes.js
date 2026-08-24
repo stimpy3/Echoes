@@ -3,6 +3,7 @@ const User = require('../models/users');
 const FollowRequest = require('../models/followRequest');
 const Follower = require("../models/follower");
 const verifyToken=require('../middleware/verifyToken');
+const { getOrSetCache } = require('../utils/cache');
 
 
 const router=express.Router();
@@ -136,24 +137,35 @@ router.get("/status/:userId", verifyToken, async (req, res) => {
 
 
 // GET /api/users/:id → get user by ID
+// Cached: this is hit on every profile view, follower list, memory card, etc. — anywhere
+// another user's name/pic/privacy is shown. 5 min TTL: short enough that a changed name
+// or privacy toggle is never stale for long, long enough to absorb repeat views of the
+// same profile in a session. Invalidated explicitly on the one write that changes this
+// payload — navbarRoutes.js's PATCH /privacy — see the cacheKey comment there.
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.params.id; // ID from URL
-    let user = await User.findById(userId).select('_id name email profilePic home isPrivate'); 
-    // You can include any other fields you want to send
 
-    if (!user) {
+    const payload = await getOrSetCache(`user:${userId}`, 300, async () => {
+      let user = await User.findById(userId).select('_id name email profilePic home isPrivate');
+
+      if (!user) return null;
+
+      // Backfill older documents that do not have isPrivate yet
+      if (typeof user.isPrivate === 'undefined') {
+        await User.updateOne({ _id: userId }, { $set: { isPrivate: false } });
+        user = await User.findById(userId).select('_id name email profilePic home isPrivate');
+      }
+
+      const obj = user.toObject();
+      obj.isPrivate = Boolean(obj.isPrivate);
+      return obj;
+    }, req.log);
+
+    if (!payload) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Backfill older documents that do not have isPrivate yet
-    if (typeof user.isPrivate === 'undefined') {
-      await User.updateOne({ _id: userId }, { $set: { isPrivate: false } });
-      user = await User.findById(userId).select('_id name email profilePic home isPrivate');
-    }
-
-    const payload = user.toObject();
-    payload.isPrivate = Boolean(payload.isPrivate);
     res.status(200).json(payload);
   } catch (err) {
     console.error('Error fetching user:', err);

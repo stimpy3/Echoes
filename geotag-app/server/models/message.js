@@ -25,4 +25,9 @@ const messageSchema = new mongoose.Schema({
     }
 });
 
+// Compound, matching the actual query in messageRoutes.js:
+// Message.find({ chatId }).sort({ createdAt: 1 }) — one index serves both the filter
+// and the sort, instead of a separate {chatId:1} index only covering half the query.
+messageSchema.index({ chatId: 1, createdAt: 1 });
+
 module.exports = mongoose.model("Message", messageSchema);

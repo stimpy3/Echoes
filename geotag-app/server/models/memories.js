@@ -30,6 +30,20 @@ const memorySchema=new mongoose.Schema({
 // 2dsphere index for geospatial queries
 memorySchema.index({ location: '2dsphere' });
 
+/*
+Compound, not separate single-field indexes — every real query against userId or likes in
+this app looks like `find({ userId }).sort({ createdAt: -1 })` (fetchmemory, Explore's own-
+memories pull, GET /memory/user/:id) or `find({ likes: userId }).sort({ createdAt: -1 })`
+(Explore's liked-memories pull). A compound index serves the filter AND the sort in one
+index; {userId:1} plus a separate {createdAt:1} would each only cover half the query.
+
+The second one is the one that actually matters today: without it, `Memory.find({ likes:
+currentUserId })` in memoryRoutes.js's /explore route is a full collection scan on every
+single Explore page load, with no index at all to fall back on partially.
+*/
+memorySchema.index({ userId: 1, createdAt: -1 });
+memorySchema.index({ likes: 1, createdAt: -1 });
+
 
 module.exports= mongoose.model('Memory',memorySchema);
 

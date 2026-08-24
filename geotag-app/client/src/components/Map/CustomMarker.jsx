@@ -8,19 +8,37 @@ import { gsap } from "gsap";
 const CustomMarker = ({ memory, onClick, isExiting = false, shouldAnimateIn = true }) => {
   const markerRef = useRef(null);
 
+  /*
+  Geometry notes — the previous version had two mismatches that made pins sit slightly off
+  from the coordinate they mark:
+
+  1. iconSize was [64,64] but the HTML root was 70x70. Leaflet positions using iconSize, so
+     the extra 6px was unaccounted for. Both are 64 wide / 70 tall now (64 photo + 6 tail),
+     and iconAnchor is [32, 70] — horizontally centred, vertically at the tail's tip, which
+     is the point that should land on the coordinate.
+
+  2. The tail used `right-[50%] translate-x-[20%]`, which is not centred: right:50% puts its
+     RIGHT edge at the midpoint, then shifts it back by 20% of its own (12px) width — about
+     2.4px — leaving it ~3.6px left of centre. `left-1/2 -translate-x-1/2` is the actual
+     centring idiom and is exact at any size.
+
+  Also added a drop shadow on the photo itself (previously only the tail had one, so the
+  card looked flat against the map) and a ring that picks up the theme, so pins stay legible
+  over both light and dark basemap tiles.
+  */
   const customIcon = L.divIcon({
     className: "", // removes default leaflet marker styles
     html: `
-    <div class="w-[70px] h-[70px] relative hover:scale-[1.1] transition-all duration-200">
-       <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain bg-gray-500 dark:border-main  bg-cover bg-center"
-         style="background-image: url('${memory.photoUrl}')">
+    <div class="w-16 h-[70px] relative hover:scale-[1.08] transition-transform duration-200 origin-bottom">
+      <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain dark:border-main bg-gray-500 bg-cover bg-center shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
+        style="background-image: url('${memory.photoUrl}')">
       </div>
-      <div class="z-10 absolute right-[50%] translate-x-[20%] shadow-md bottom-0 w-3 rotate-45 aspect-square bg-dmain dark:bg-main"></div>
+      <div class="z-10 absolute left-1/2 -translate-x-1/2 bottom-0 w-3 aspect-square rotate-45 bg-dmain dark:bg-main shadow-[0_2px_4px_rgba(0,0,0,0.25)]"></div>
     </div>
     `,
-    iconSize: [64, 64],
-    iconAnchor: [32, 64], // bottom of marker aligns with location
-    popupAnchor: [0, -70], // popup offset above marker
+    iconSize: [64, 70],
+    iconAnchor: [32, 70], // horizontally centred; vertically at the tail tip
+    popupAnchor: [0, -72], // just above the photo, clear of the tail
   });
 
   useEffect(() => {
@@ -114,10 +132,18 @@ const CustomMarker = ({ memory, onClick, isExiting = false, shouldAnimateIn = tr
               className="w-full h-40 object-cover rounded-lg mb-2"
             />
 
-            <div className="px-[5px]">
-              <h3 className="font-bold text-lg">{memory.title}</h3>
-              <p className="text-sm my-[10px]">{memory.description}</p> 
-              <p className="text-xs text-gray-500 flex items-center justify-center"><div className="scale-[0.8]"><MapPin/></div> {memory.location.address}</p>
+            <div className="px-[5px] pb-[2px]">
+              <h3 className="font-bold text-lg leading-snug">{memory.title}</h3>
+              <p className="text-sm my-[10px]">{memory.description}</p>
+              {/* Was <div> nested inside <p> — invalid HTML, so the browser auto-closed the
+                  <p> before the div and the flex row never applied, leaving the icon and
+                  address on separate lines. <span> is valid inside <p> and keeps the row.
+                  items-start + shrink-0 so a long address wraps beside the pin rather than
+                  squashing it. */}
+              <p className="text-xs text-gray-500 flex items-start gap-1">
+                <span className="shrink-0 mt-[1px]"><MapPin size={13} /></span>
+                <span>{memory.location.address}</span>
+              </p>
             </div>
 
           </div>

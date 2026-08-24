@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const User = require('../models/users');
 const jwt = require('jsonwebtoken');
+const { loginLimiter, signupLimiter, googleAuthLimiter } = require('../middleware/rateLimiter');
 
 // Helper to create token
 const createToken = (userId) => {
@@ -34,7 +35,7 @@ Browser cannot generate a valid signature without the secret.
 
 //SIGNUP ROUTE
 //this defines a route on router instance
-router.post('/signup', async (req, res) => {
+router.post('/signup', signupLimiter, async (req, res) => {
   const { name, email, password } = req.body;
 
   // Validate fields
@@ -114,13 +115,16 @@ domain: Restricts cookie to a domain. Use example.com to include subdomains (app
 
     res.status(201).json({ message: 'Account Created' });
   } catch (err) {
+    // Previously unlogged — a failed signup produced zero server-side trace, only the
+    // client-facing error message. Now traceable by the request id like everything else.
+    req.log.error({ err }, 'Signup error');
     res.status(500).json({ message: 'Error creating user', error: err.message });
   }
 });
 
 
 //LOGIN route
-router.post('/login', async(req,res)=>{
+router.post('/login', loginLimiter, async(req,res)=>{
   const {email,password}=req.body;
   //validate fields
   if(!email || !password){
@@ -155,6 +159,8 @@ router.post('/login', async(req,res)=>{
     res.status(200).json({message:'Login successful'});
   }
   catch(err){
+    // Same gap as signup — was silent before, now traceable by request id.
+    req.log.error({ err }, 'Login error');
     res.status(500).json({message:'Server error during login', error: err.message});
   }
 });
@@ -175,7 +181,7 @@ const { OAuth2Client } = require('google-auth-library');
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // GOOGLE LOGIN/SIGNUP
-router.post('/google', async (req, res) => {
+router.post('/google', googleAuthLimiter, async (req, res) => {
   const { token } = req.body; // Frontend sends the ID token from Google
 
   try {
@@ -224,7 +230,13 @@ router.post('/google', async (req, res) => {
       isNewUser
     });
   } catch (err) {
-    console.error(err);
+    // This is the exact catch that mislabeled a MongoDB connectivity failure as "Invalid
+    // Google token" earlier — it still does; that's a separate, not-yet-fixed bug (the
+    // response always claims token failure regardless of what actually broke). What
+    // changes here: err.name/err.message are now logged with the request id, so "was
+    // this really a bad token or was Mongo down" is answerable from the logs even though
+    // the client-facing message doesn't yet distinguish the two.
+    req.log.error({ err }, 'Google auth error');
     res.status(401).json({ message: 'Invalid Google token', error: err.message });
   }
 });

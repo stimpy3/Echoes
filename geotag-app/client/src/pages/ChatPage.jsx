@@ -105,14 +105,9 @@ const ChatPage = () => {
   useEffect(() => {
     if (!myId) return;
 
-    // Prevent duplicate connections. If not connected, set auth and connect.
+    // Prevent duplicate connections. Identity now comes from the JWT cookie on the
+    // handshake, so there is no auth payload to set — just connect if we aren't already.
     if (!socket.connected) {
-      socket.auth = { userId: myId };
-      socket.connect();
-    } else if (socket.auth?.userId !== myId) {
-      // If already connected with different auth, reconnect with correct id
-      socket.disconnect();
-      socket.auth = { userId: myId };
       socket.connect();
     }
 

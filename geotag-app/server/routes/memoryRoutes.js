@@ -6,6 +6,7 @@ const Follower = require('../models/follower');
 const verifyToken = require('../middleware/verifyToken');
 const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
 const { generateEmbeddingWithRetry } = require('../utils/embeddingHelper');
+const { enqueueEmbeddingJob } = require('../queues/embeddingQueue');
 
 const buildProjectionStage = {
     $project: {
@@ -194,26 +195,18 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
         // Respond to the user immediately for the fastest experience
         res.status(201).json({ memory: savedMemory });
 
-        // Generate embedding in the background
-        (async () => {
-            try {
-                const textToEmbed = `${title} ${description}`;
-                const embedding = await generateEmbeddingWithRetry(textToEmbed, {
-                    maxRetries: 3,
-                    initialDelayMs: 300
-                });
-                if (embedding) {
-                    await Memory.findByIdAndUpdate(savedMemory._id, { embedding });
-                    console.log(`✅ Background embedding completed for memory: ${savedMemory._id}`);
-                } else {
-                    console.warn(`⚠️ Embedding generation failed after retries for memory: ${savedMemory._id}`);
-                }
-            } catch (err) {
-                console.error("Background embedding failed:", err);
-            }
-        })();
+        // Queue embedding generation — see queues/embeddingQueue.js for why this replaced
+        // an in-process fire-and-forget call. Enqueueing itself can fail (Redis briefly
+        // unreachable); that's caught separately so it can't take down memory creation,
+        // which has already responded to the user by this point regardless.
+        try {
+            const textToEmbed = `${title} ${description}`;
+            await enqueueEmbeddingJob(savedMemory._id, textToEmbed);
+        } catch (err) {
+            req.log.error({ err, memoryId: savedMemory._id }, 'Failed to enqueue embedding job');
+        }
     } catch (err) {
-        console.error("Memory creation error:", err);
+        req.log.error({ err }, 'Memory creation error');
         res.status(500).json({ message: 'Server failed to create memory' });
     }
 });
@@ -260,7 +253,7 @@ router.get('/user/:id', verifyToken, async (req, res) => {
     const memories = await Memory.find({ userId: profileUserId }).sort({ createdAt: -1 });
     res.status(200).json({ memories });
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'Server error fetching user memories');
     res.status(500).json({ message: 'Server error fetching user memories' });
   }
 });
@@ -286,7 +279,7 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
                     await cloudinary.uploader.destroy(publicId);
                 }
             } catch (err) {
-                console.error("Failed to delete old image from Cloudinary:", err);
+                req.log.error({ err }, 'Failed to delete old image from Cloudinary');
             }
             updateData.photoUrl = req.file.path;
         }
@@ -304,28 +297,18 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
         // Respond to the user immediately
         res.status(200).json({ memory: updatedMemory });
 
-        // If title or description changed, regenerate embedding in background
+        // If title or description changed, queue a re-embedding job (see creatememory
+        // above for why this is a queue now rather than an in-process retry loop).
         if (title || description) {
-            (async () => {
-                try {
-                    const textToEmbed = `${title || updatedMemory.title} ${description || updatedMemory.description}`;
-                    const embedding = await generateEmbeddingWithRetry(textToEmbed, {
-                        maxRetries: 3,
-                        initialDelayMs: 300
-                    });
-                    if (embedding) {
-                        await Memory.findByIdAndUpdate(memoryId, { embedding });
-                        console.log(`✅ Background embedding update completed for memory: ${memoryId}`);
-                    } else {
-                        console.warn(`⚠️ Embedding update failed after retries for memory: ${memoryId}`);
-                    }
-                } catch (err) {
-                    console.error("Background embedding update failed:", err);
-                }
-            })();
+            try {
+                const textToEmbed = `${title || updatedMemory.title} ${description || updatedMemory.description}`;
+                await enqueueEmbeddingJob(memoryId, textToEmbed);
+            } catch (err) {
+                req.log.error({ err, memoryId }, 'Failed to enqueue embedding update job');
+            }
         }
     } catch (err) {
-        console.error("Memory edit error:", err);
+        req.log.error({ err }, 'Memory edit error');
         res.status(500).json({ message: 'Server failed to update memory' });
     }
 });
@@ -347,14 +330,14 @@ router.delete('/deletememory/:id', verifyToken, async (req, res) => {
                 const publicId = `memories/${fileNameWithExt.split('.')[0]}`;
                 await cloudinary.uploader.destroy(publicId);
             } catch (err) {
-                console.error("Cloudinary image deletion failed:", err);
+                req.log.error({ err }, 'Cloudinary image deletion failed');
             }
         }
 
         await Memory.deleteOne({ _id: memoryId, userId: req.userId });
         res.status(200).json({ message: 'Memory and image deleted successfully' });
     } catch (err) {
-        console.error(err);
+        req.log.error({ err }, 'Server failed to delete memory');
         res.status(500).json({ message: 'Server failed to delete memory' });
     }
 });
@@ -440,7 +423,7 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
     res.status(200).json(result);
 
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'Server failed to fetch friend memories');
     res.status(500).json({
       message: 'server failed to fetch friend memories'
     });
@@ -466,7 +449,7 @@ router.post('/like/:id', verifyToken, async (req, res) => {
         await memory.save();
         res.status(200).json({ likes: memory.likes });
     } catch (err) {
-        console.error(err);
+        req.log.error({ err }, 'Server error toggling like');
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -490,7 +473,7 @@ router.post('/comment/:id', verifyToken, async (req, res) => {
         const newComment = populatedMemory.comments[populatedMemory.comments.length - 1];
         res.status(201).json(newComment);
     } catch (err) {
-        console.error(err);
+        req.log.error({ err }, 'Server error adding comment');
         res.status(500).json({ message: 'Server error adding comment' });
     }
 });
@@ -505,7 +488,7 @@ router.get('/single/:id', verifyToken, async (req, res) => {
         if (!memory) return res.status(404).json({ message: 'Memory not found' });
         res.status(200).json(memory);
     } catch (err) {
-        console.error(err);
+        req.log.error({ err }, 'Server error fetching memory');
         res.status(500).json({ message: 'Server error fetching memory' });
     }
 });
@@ -545,11 +528,10 @@ router.get('/explore', verifyToken, async (req, res) => {
         let targetEmbedding = null;
         let recentLocation = null;
 
-        console.log(`\n--- [Hybrid Explore Engine] ---`);
-        console.log(`Building profile for User: ${currentUserId}`);
+        req.log.info({ userId: currentUserId }, '[Explore] building profile');
 
         if (normalizedSearchQuery) {
-            console.log(`Mode: Active Search ('${normalizedSearchQuery}')`);
+            req.log.info({ searchQuery: normalizedSearchQuery }, '[Explore] mode: active search');
             targetEmbedding = await generateEmbeddingWithRetry(normalizedSearchQuery, {
                 maxRetries: 2,
                 initialDelayMs: 250
@@ -559,7 +541,7 @@ router.get('/explore', verifyToken, async (req, res) => {
                 diagnostics.fallbackReason = 'search_embedding_unavailable';
             }
         } else {
-            console.log(`Mode: Passive Browsing (Mood + Geo Hybrid)`);
+            req.log.info('[Explore] mode: passive browsing (mood + geo hybrid)');
             // Find User's own memories OR Liked memories
             const ownMemories = await Memory.find({ userId: currentUserId }).select('+embedding').sort({ createdAt: -1 });
             const likedMemories = await Memory.find({ likes: currentUserId }).select('+embedding').sort({ createdAt: -1 });
@@ -580,7 +562,10 @@ router.get('/explore', verifyToken, async (req, res) => {
 
             diagnostics.historyInteractions = uniqueInteractions.length;
 
-            console.log(`Found ${uniqueInteractions.length} unique historical interactions.`);
+            req.log.info(
+                { historyInteractions: uniqueInteractions.length },
+                '[Explore] unique historical interactions found'
+            );
 
             // Extract embeddings
             const embeddings = uniqueInteractions
@@ -609,7 +594,10 @@ router.get('/explore', verifyToken, async (req, res) => {
                 }
                 
                 targetEmbedding = clusters[bestClusterIdx];
-                console.log(`[Stream A - Mood Market] Clustered history into ${clusters.length} centroids. Selected Cluster ${bestClusterIdx + 1} as active mood.`);
+                req.log.info(
+                    { clusterCount: clusters.length, selectedCluster: bestClusterIdx + 1 },
+                    '[Explore] stream A (mood market): active mood selected'
+                );
             }
 
             // Stream B: Local Explorer (Geo-Awareness)
@@ -617,7 +605,10 @@ router.get('/explore', verifyToken, async (req, res) => {
             if (mostRecentWithLoc) {
                 recentLocation = mostRecentWithLoc.location.coordinates;
                 diagnostics.hasRecentLocation = true;
-                console.log(`[Stream B - Local Explorer] Found recent location anchor: [${recentLocation[0]}, ${recentLocation[1]}]`);
+                req.log.info(
+                    { lng: recentLocation[0], lat: recentLocation[1] },
+                    '[Explore] stream B (local explorer): recent location anchor found'
+                );
             }
 
             if (!targetEmbedding && !recentLocation) {
@@ -668,11 +659,17 @@ router.get('/explore', verifyToken, async (req, res) => {
                 });
                 contentResults = attachReason(contentResults, semanticReason, normalizedSearchQuery ? 'semantic_search' : 'semantic_profile');
                 diagnostics.streamAContentCount = contentResults.length;
-                console.log(`[Stream A] Extracted ${contentResults.length} semantic matches.`);
+                req.log.info(
+                    { streamAContentCount: contentResults.length },
+                    '[Explore] stream A: semantic matches extracted'
+                );
             } catch (streamAErr) {
                 diagnostics.vectorError = streamAErr.message || 'vector_search_failed';
                 diagnostics.fallbackReason = diagnostics.fallbackReason || 'vector_stream_failed';
-                console.warn('[Stream A] Vector search unavailable, degrading gracefully:', diagnostics.vectorError);
+                req.log.warn(
+                    { err: streamAErr },
+                    '[Explore] stream A: vector search unavailable, degrading gracefully'
+                );
             }
         }
 
@@ -734,7 +731,10 @@ router.get('/explore', verifyToken, async (req, res) => {
                 'geo'
             );
             diagnostics.streamBGeoCount = geoResults.length;
-            console.log(`[Stream B] Extracted ${geoResults.length} localized matches within 50km.`);
+            req.log.info(
+                { streamBGeoCount: geoResults.length },
+                '[Explore] stream B: localized matches extracted (50km)'
+            );
         }
 
         // --- Blending ---
@@ -751,11 +751,11 @@ router.get('/explore', verifyToken, async (req, res) => {
         }
 
         let finalResults = Array.from(mergedMap.values());
-        console.log(`[Blending] Total unique feed generated: ${finalResults.length} memories.`);
+        req.log.info({ feedSize: finalResults.length }, '[Explore] blending: unique feed generated');
 
         // --- Stream C (Fallback Ladder, strict privacy preserved) ---
         if (finalResults.length === 0) {
-            console.log(`[Stream C - Fallback] No blended results. Running strict-privacy fallback ladder.`);
+            req.log.warn('[Explore] no blended results, running strict-privacy fallback ladder');
 
             const categoryFallback = await Memory.aggregate(
                 buildRecentEligiblePipeline({
@@ -819,11 +819,14 @@ router.get('/explore', verifyToken, async (req, res) => {
             }
         }
 
-        console.log('[Explore Diagnostics]', diagnostics);
-        console.log('--- [End Log] ---\n');
+        // Spread rather than nest so every field (fallbackReason, vectorError, the per-
+        // stream counts, ...) is individually queryable in log-aggregation tooling — e.g.
+        // "show me every request where fallbackReason = vector_stream_failed" — instead of
+        // being buried one level down inside an opaque "diagnostics" object.
+        req.log.info({ ...diagnostics, resultCount: finalResults.length }, '[Explore] request complete');
         res.status(200).json({ memories: finalResults });
     } catch (err) {
-        console.error("Explore error", err);
+        req.log.error({ err }, '[Explore] request failed');
         res.status(500).json({ message: "Server error generating explore feed" });
     }
 });

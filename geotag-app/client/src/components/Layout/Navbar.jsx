@@ -7,6 +7,20 @@ import { useTheme } from "../../context/ThemeContext";
 import { useHome } from '../../context/HomeContext';
 import axios from "axios";
 import { useNavigate } from 'react-router-dom';
+import { socket } from '../../utils/socket';
+
+/*
+Single source of truth for the primary nav destinations. These were previously written out
+three times for desktop and three more for mobile — six copies of the same routes, each with
+its own duplicated class string, so adding a nav item meant editing two places and keeping
+two sets of styles in sync by hand. The styling still differs between desktop and mobile
+(pill row vs grid), which is fine — that's presentation. Only the data is shared.
+*/
+const NAV_LINKS = [
+  { to: "/home", label: "Map" },
+  { to: "/explore", label: "Explore" },
+  { to: "/timeline", label: "Timeline" },
+];
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -67,8 +81,23 @@ const Navbar = () => {
       }
     };
 
+    // Escape closing an open dropdown is a baseline expectation for any popover — without
+    // it, a keyboard user who opens the settings menu has no way to dismiss it without
+    // tabbing through every item or reaching for the mouse.
+    const handleEscape = (e) => {
+      if (e.key === "Escape") {
+        setOpenNotif(false);
+        setShowSettings(false);
+        setMobileMenuOpen(false);
+      }
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,6 +140,10 @@ const Navbar = () => {
   const logOutUser = async () => {
     try {
       await axios.post(`${BASE_URL}/api/auth/logout`, {}, { withCredentials: true });
+      //The socket's identity was fixed at handshake time from the JWT cookie, so it does not
+      //stop being "this user" just because the cookie was cleared. Drop it explicitly, or the
+      //next person to log in on this tab would inherit the previous user's live connection.
+      socket.disconnect();
       navigate('/');
     }
     catch (err) {
@@ -137,7 +170,7 @@ const Navbar = () => {
   }, []);
 
   return (
-    <nav className="transparent bg-[linear-gradient(to_bottom,theme(colors.fadeColor)_10%,transparent_100%)] 
+    <nav className="bg-[linear-gradient(to_bottom,theme(colors.fadeColor)_10%,transparent_100%)]
           dark:bg-[linear-gradient(to_bottom,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[999] top-[0px] py-[5px] left-0 right-0 px-[10px] sm:px-[20px]">
       <div className="flex justify-between items-center h-[50px] relative z-10 gap-2">
         {/* Logo/Brand */}
@@ -146,58 +179,58 @@ const Navbar = () => {
         </Link>
 
         {/* Navigation Links */}
+        {/* Note: the original class string carried BOTH `text-[1.2rem]` and `text-sm`.
+            Only one can apply — verified against the built stylesheet that `text-sm` is
+            emitted later and therefore wins, making `text-[1.2rem]` dead. Dropped it;
+            rendered size is unchanged. */}
         <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center space-x-[12px] py-[5px] px-[5px] h-full bg-main/50 dark:bg-dborderColor/50 backdrop-blur-[2px] border-[1px] border-borderColor dark:border-dborderColor rounded-full">
-          <NavLink to="/home" className={({ isActive }) =>
-            `p-[5px] h-full flex items-center justify-center rounded-full text-[1.2rem] w-[80px] text-center
-                     text-sm font-medium ${isActive ?
-              "bg-dmain text-white dark:bg-main dark:text-black"
-              :
-              "text-black dark:text-white"} 
-                    `
-          }
-          >
-            Map
-          </NavLink>
-
-          <NavLink to="/explore" className={({ isActive }) =>
-            `p-[5px] h-full flex items-center justify-center rounded-full text-[1.2rem] w-[80px] text-center
-                     text-sm font-medium ${isActive ?
-              "bg-dmain text-white dark:bg-main dark:text-black"
-              :
-              "text-black dark:text-white"} 
-                    `
-          }
-          >
-            Explore
-          </NavLink>
-
-          <NavLink to="/timeline" className={({ isActive }) =>
-            `p-[5px] h-full flex items-center justify-center rounded-full text-[1.2rem] w-[80px] text-center
-                     text-sm font-medium ${isActive ?
-              "bg-dmain text-white dark:bg-main dark:text-black"
-              :
-              "text-black dark:text-white"} 
-                    `
-          }
-          >
-            Timeline
-          </NavLink>
+          {NAV_LINKS.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `p-[5px] h-full flex items-center justify-center rounded-full w-[80px] text-center
+                 text-sm font-medium ${isActive
+                  ? "bg-dmain text-white dark:bg-main dark:text-black"
+                  : "text-black dark:text-white"}`
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
         </div>
 
         <div className='w-fit h-[50px] flex items-center gap-2 sm:gap-4'>
           <div className="relative" ref={notifRef}>
-            <button onClick={() => setOpenNotif(prev => !prev)} className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full relative">
+            <button
+              onClick={() => setOpenNotif(prev => !prev)}
+              // Icon-only button: without a label a screen reader announces just "button".
+              // The count goes in the label too, so it isn't information only sighted
+              // users get from the badge.
+              aria-label={notifCount > 0 ? `Notifications (${notifCount} unread)` : "Notifications"}
+              aria-expanded={openNotif}
+              aria-haspopup="true"
+              className="flex text-borderColor dark:text-dlightTxt items-center justify-center h-full w-full relative"
+            >
               <Bell className="scale-[0.9]" />
               {notifCount > 0 && (
-                <span className="absolute top-[-5px] -right-1 bg-red-500 text-white text-[0.65rem] font-semibold px-[6px] py-[1px] rounded-full">
-                  {notifCount}
+                // Capped at 99+ — an uncapped 3-digit count stretches the pill wide enough
+                // to overlap the chat icon next to it.
+                <span
+                  aria-hidden="true"
+                  className="absolute top-[-5px] -right-1 bg-red-500 text-white text-[0.65rem] font-semibold px-[6px] py-[1px] rounded-full"
+                >
+                  {notifCount > 99 ? "99+" : notifCount}
                 </span>
               )}
             </button>
 
             {/* Dropdown Notif */}
             {openNotif && (
-              <div className="absolute right-0 top-[48px] w-[min(92vw,360px)] p-[5px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md backdrop-blur-md">
+              // max-h + overflow-y-auto: the list was previously unbounded, so a user with
+              // many pending follow requests got a dropdown taller than the viewport with
+              // no way to scroll it — the items past the bottom were unreachable.
+              <div className="absolute right-0 top-[48px] w-[min(92vw,360px)] max-h-[min(70vh,420px)] overflow-y-auto custom-scrollbar p-[5px] bg-white dark:bg-dborderColor border border-borderColor dark:border-dborderColor shadow-lg rounded-md backdrop-blur-md">
                 {notifications.length === 0 ? (
                   <p className="text-sm text-txt p-[2px] w-fit dark:text-dtxt whitespace-nowrap">No notifications yet</p>
                 ) : (
@@ -214,9 +247,23 @@ const Navbar = () => {
                         <p className="text-[0.8rem] text-txt dark:text-dtxt font-medium">{req.sender.name} sent follow request</p>
                         <p className="text-[0.6rem] text-gray-400">{formatDate(req.createdAt)}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleFollowConfirm(req.sender._id, req._id)} className="px-2 py-1 text-xs bg-gradient-main text-white rounded-md">Accept</button>
-                        <button onClick={() => handleDeleteNotif(req._id)} className="px-2 py-1 text-xs bg-dlightMain text-white rounded-md">X</button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleFollowConfirm(req.sender._id, req._id)}
+                          className="px-2 py-1 text-xs bg-gradient-main text-white rounded-md"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => handleDeleteNotif(req._id)}
+                          // Was a literal "X" character — swapped for the same X icon the
+                          // rest of the nav uses, and labelled, since "X" alone tells a
+                          // screen reader nothing about what it does.
+                          aria-label={`Dismiss follow request from ${req.sender.name}`}
+                          className="p-1 text-xs bg-dlightMain text-white rounded-md flex items-center justify-center"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -225,7 +272,11 @@ const Navbar = () => {
             )}
           </div>
 
-          <button onClick={handleChat} className="flex text-borderColor dark:text-dlightTxt items-center justify-center">
+          <button
+            onClick={handleChat}
+            aria-label="Messages"
+            className="flex text-borderColor dark:text-dlightTxt items-center justify-center"
+          >
             <MessageCircleMore />
           </button>
 
@@ -235,6 +286,9 @@ const Navbar = () => {
             <div className="relative" ref={settingsRef}>
               <button
                 onClick={() => setShowSettings(prev => !prev)}
+                aria-label="Settings"
+                aria-expanded={showSettings}
+                aria-haspopup="true"
                 className={`p-2 rounded-full transition-all duration-300 ${showSettings ? "bg-main text-black rotate-90" : "text-borderColor dark:text-dlightTxt hover:bg-white/10"}`}
               >
                 <Settings size={22} />
@@ -249,16 +303,27 @@ const Navbar = () => {
                     <p className="text-[0.7rem] text-lightTxt dark:text-dlightTxt truncate">{email}</p>
                   </div>
 
-                  {/* Privacy Toggle */}
-                  <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition mb-1 cursor-pointer" onClick={handlePrivacyToggle}>
-                    <div className="flex items-center gap-2 text-txt dark:text-dtxt">
+                  {/* Privacy Toggle.
+                      Was a <div onClick> — not focusable, not reachable by keyboard, and
+                      invisible to assistive tech as a control. Now a real <button> with
+                      role="switch" + aria-checked, so it announces its on/off state rather
+                      than just its label. Inner divs became spans because <div> is flow
+                      content and isn't valid inside a <button>. Visuals unchanged. */}
+                  <button
+                    type="button"
+                    onClick={handlePrivacyToggle}
+                    role="switch"
+                    aria-checked={isPrivate}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition mb-1 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 text-txt dark:text-dtxt">
                       {isPrivate ? <Lock size={16} className="text-red-500" /> : <Globe size={16} className="text-green-500" />}
                       <span className="text-sm">{isPrivate ? "Private Account" : "Public Account"}</span>
-                    </div>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${isPrivate ? "bg-red-500" : "bg-gray-300 dark:bg-gray-600"}`}>
-                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isPrivate ? "right-0.5" : "left-0.5"}`} />
-                    </div>
-                  </div>
+                    </span>
+                    <span className={`block w-8 h-4 rounded-full relative transition-colors ${isPrivate ? "bg-red-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                      <span className={`block absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isPrivate ? "right-0.5" : "left-0.5"}`} />
+                    </span>
+                  </button>
 
                   {/* Home Location */}
                   <button onClick={handlehomeLocation} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-txt dark:text-dtxt transition mb-1">
@@ -287,23 +352,33 @@ const Navbar = () => {
               )}
             </div>
 
-            {/* Circle PFP (Clickable to Profile) */}
-            <div onClick={() => navigate('/profile')} className="w-[40px] h-[40px] rounded-full overflow-hidden border-[1px] border-borderColor dark:border-dborderColor cursor-pointer transition active:scale-95">
+            {/* Circle PFP (Clickable to Profile).
+                Was a <div onClick> — same problem as the privacy toggle: a mouse-only
+                control that keyboard and screen-reader users couldn't reach at all.
+                alt="" on the image because the button itself is already labelled; a
+                nested "pfp" alt would just make it announce twice. */}
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              aria-label="Your profile"
+              className="w-[40px] h-[40px] rounded-full overflow-hidden border-[1px] border-borderColor dark:border-dborderColor cursor-pointer transition active:scale-95"
+            >
               {profilePic ? (
-                <img src={profilePic} alt="pfp" className="w-full h-full object-cover" />
+                <img src={profilePic} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gray-400 dark:bg-[#393939] flex items-end justify-center">
+                <span className="w-full h-full bg-gray-400 dark:bg-[#393939] flex items-end justify-center">
                   <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
-                </div>
+                </span>
               )}
-            </div>
+            </button>
 
           </div>
 
           <button
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             className="md:hidden p-2 rounded-full text-borderColor dark:text-dlightTxt hover:bg-white/10"
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -313,33 +388,18 @@ const Navbar = () => {
       {mobileMenuOpen && (
         <div className="md:hidden mt-2 rounded-xl border border-borderColor dark:border-dborderColor bg-main/80 dark:bg-dborderColor/80 backdrop-blur-md p-2">
           <div className="grid grid-cols-3 gap-2 mb-2">
-            <NavLink
-              to="/home"
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
-              }
-            >
-              Map
-            </NavLink>
-            <NavLink
-              to="/explore"
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
-              }
-            >
-              Explore
-            </NavLink>
-            <NavLink
-              to="/timeline"
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
-              }
-            >
-              Timeline
-            </NavLink>
+            {NAV_LINKS.map(({ to, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `px-2 py-2 rounded-lg text-center text-sm font-medium ${isActive ? "bg-dmain text-white dark:bg-main dark:text-black" : "text-black dark:text-white bg-white/30 dark:bg-black/20"}`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
