@@ -8,6 +8,7 @@ import axios from "axios";
 import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import BareHomePage from '../BarebonesPages/BareHomePage';
+import { setCsrfToken } from '../../utils/csrf';
 
 const Signup = ({ onSwitchToLogin }) => {
 
@@ -103,6 +104,7 @@ const Signup = ({ onSwitchToLogin }) => {
       response.config → The Axios request configuration used.
        */
 
+      setCsrfToken(response.data.csrfToken);
       setSuccess('Account created successfully!');
       setFormData({ name: '', email: '', password: ''});//reset
       navigate('/homelocation');//redirect to set home location
@@ -213,6 +215,7 @@ That’s why the Google button sometimes disappears.  thats why the setTimeout*/
     );
 
     // console.log("Google login success:", res.data);
+    setCsrfToken(res.data.csrfToken);
 
     if (res.data.isNewUser) {
       navigate("/homelocation"); // redirect new users

@@ -8,6 +8,7 @@ import { useHome } from '../../context/HomeContext';
 import axios from "axios";
 import { useNavigate } from 'react-router-dom';
 import { socket } from '../../utils/socket';
+import { clearCsrfToken } from '../../utils/csrf';
 
 /*
 Single source of truth for the primary nav destinations. These were previously written out
@@ -191,6 +192,7 @@ const Navbar = () => {
       //stop being "this user" just because the cookie was cleared. Drop it explicitly, or the
       //next person to log in on this tab would inherit the previous user's live connection.
       socket.disconnect();
+      clearCsrfToken(); // stale once the session it was issued for ends; not sensitive on its own, just tidy
       navigate('/');
     }
     catch (err) {

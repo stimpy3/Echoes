@@ -35,6 +35,15 @@ function extractTokenCookie(res) {
   return tokenLine.split(';')[0]; // "token=<value>"
 }
 
+// CSRF fix (BE-002): every mutating request now needs this exact value as an
+// X-CSRF-Token header — see middleware/verifyToken.js. Real signup/login responses
+// carry it in the JSON body (the same way a real browser client would read it from its
+// own login response), not the cookie.
+function extractCsrfToken(res) {
+  if (!res.body || !res.body.csrfToken) throw new Error('No csrfToken in response body');
+  return res.body.csrfToken;
+}
+
 function uniqueEmail(tag) {
   return `phase0-${tag}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
 }
@@ -51,6 +60,8 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
 
   let cookieA;
   let cookieB;
+  let csrfA;
+  let csrfB;
   let userAId;
   let userBId;
   let createdMemoryId;
@@ -60,6 +71,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
     expect(res.status).toBe(201);
     expect(res.body.message).toBe('Account Created');
     cookieA = extractTokenCookie(res);
+    csrfA = extractCsrfToken(res);
   });
 
   test('signup rejects a duplicate email', async () => {
@@ -73,6 +85,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
       .send({ email: userA.email, password: userA.password });
     expect(res.status).toBe(200);
     cookieA = extractTokenCookie(res);
+    csrfA = extractCsrfToken(res);
   });
 
   test('login rejects a wrong password without revealing which part was wrong differently than an unknown email', async () => {
@@ -86,6 +99,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
     const res = await request(baseURL).post('/api/auth/signup').send(userB);
     expect(res.status).toBe(201);
     cookieB = extractTokenCookie(res);
+    csrfB = extractCsrfToken(res);
   });
 
   test('navbar identity fetch resolves each user\'s own id', async () => {
@@ -111,6 +125,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
     const res = await request(baseURL)
       .post('/api/memory/creatememory')
       .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA)
       .field('title', 'Phase 0 regression test memory')
       .field('description', 'Created by the automated regression suite, deleted immediately after.')
       .field('location', JSON.stringify({
@@ -149,6 +164,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
     const res = await request(baseURL)
       .post('/api/follow/request')
       .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA)
       .send({ receiverId: userBId });
     expect(res.status).toBe(200);
     expect(res.body.following).toBe(true);
@@ -161,6 +177,7 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
     const res = await request(baseURL)
       .post('/api/follow/unfollow')
       .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA)
       .send({ receiverId: userBId });
     expect(res.status).toBe(200);
 
@@ -230,7 +247,8 @@ describe('Phase 0 regression — existing app behavior is unchanged', () => {
   test('cleanup: delete the test memory (exercises the real Cloudinary destroy path too)', async () => {
     const res = await request(baseURL)
       .delete(`/api/memory/deletememory/${createdMemoryId}`)
-      .set('Cookie', cookieA);
+      .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA);
     expect(res.status).toBe(200);
 
     const after = await request(baseURL).get('/api/memory/fetchmemory').set('Cookie', cookieA);

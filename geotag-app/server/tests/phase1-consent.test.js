@@ -18,6 +18,12 @@ function extractTokenCookie(res) {
   return tokenLine.split(';')[0];
 }
 
+// CSRF fix (BE-002): every mutating request now needs this exact value as an
+// X-CSRF-Token header — see middleware/verifyToken.js.
+function extractCsrfToken(res) {
+  return res.body.csrfToken;
+}
+
 function uniqueEmail(tag) {
   return `phase1-${tag}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`;
 }
@@ -84,6 +90,7 @@ describe('Phase 1 — co-presence consent flag', () => {
       .post('/api/auth/signup')
       .send({ name: 'Phase 1 Toggle User', email, password: 'correct-horse-battery' });
     const cookie = extractTokenCookie(signup);
+    const csrf = extractCsrfToken(signup);
 
     const before = await request(baseURL).get('/api/user/navbar').set('Cookie', cookie);
     expect(before.body.coPresenceOptIn).toBe(false);
@@ -91,6 +98,7 @@ describe('Phase 1 — co-presence consent flag', () => {
     const patchOn = await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf)
       .send({ optIn: true });
     expect(patchOn.status).toBe(200);
     expect(patchOn.body.coPresenceOptIn).toBe(true);
@@ -101,6 +109,7 @@ describe('Phase 1 — co-presence consent flag', () => {
     const patchOff = await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf)
       .send({ optIn: false });
     expect(patchOff.body.coPresenceOptIn).toBe(false);
   });
@@ -111,10 +120,12 @@ describe('Phase 1 — co-presence consent flag', () => {
       .post('/api/auth/signup')
       .send({ name: 'Phase 1 Bad Input User', email, password: 'correct-horse-battery' });
     const cookie = extractTokenCookie(signup);
+    const csrf = extractCsrfToken(signup);
 
     const res = await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf)
       .send({ optIn: 'yes-please' });
     expect(res.status).toBe(400);
   });
@@ -131,11 +142,13 @@ describe('Phase 1 — co-presence consent flag', () => {
       .send({ name: 'Isolation User B', email: emailB, password: 'correct-horse-battery' });
 
     const cookieA = extractTokenCookie(signupA);
+    const csrfA = extractCsrfToken(signupA);
     const cookieB = extractTokenCookie(signupB);
 
     await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', cookieA)
+      .set('X-CSRF-Token', csrfA)
       .send({ optIn: true });
 
     const bStatus = await request(baseURL).get('/api/user/navbar').set('Cookie', cookieB);

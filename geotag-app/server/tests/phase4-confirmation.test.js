@@ -59,8 +59,11 @@ async function createUser(name) {
     .post('/api/auth/signup')
     .send({ name, email, password: 'correct-horse-battery' });
   const cookie = extractTokenCookie(signupRes);
+  // CSRF fix (BE-002): every mutating request now needs this exact value as an
+  // X-CSRF-Token header — see middleware/verifyToken.js.
+  const csrf = signupRes.body.csrfToken;
   const navbarRes = await request(baseURL).get('/api/user/navbar').set('Cookie', cookie);
-  return { id: navbarRes.body._id, cookie };
+  return { id: navbarRes.body._id, cookie, csrf };
 }
 
 async function makeMemory(userId, lng) {
@@ -97,12 +100,14 @@ describe('Phase 4 — co-presence confirmation flow', () => {
 
     const confirmRes = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/confirm`)
-      .set('Cookie', stranger.cookie);
+      .set('Cookie', stranger.cookie)
+      .set('X-CSRF-Token', stranger.csrf);
     expect(confirmRes.status).toBe(403);
 
     const rejectRes = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/reject`)
-      .set('Cookie', stranger.cookie);
+      .set('Cookie', stranger.cookie)
+      .set('X-CSRF-Token', stranger.csrf);
     expect(rejectRes.status).toBe(403);
   });
 
@@ -144,7 +149,8 @@ describe('Phase 4 — co-presence confirmation flow', () => {
 
     const confirmRes = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/confirm`)
-      .set('Cookie', userA.cookie);
+      .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf);
     expect(confirmRes.status).toBe(200);
     expect(confirmRes.body.status).toBe('awaiting_other_confirmation');
 
@@ -175,10 +181,11 @@ describe('Phase 4 — co-presence confirmation flow', () => {
     const userB = await createUser('P4 MatchB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf);
     const secondConfirm = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/confirm`)
-      .set('Cookie', userB.cookie);
+      .set('Cookie', userB.cookie)
+      .set('X-CSRF-Token', userB.csrf);
 
     expect(secondConfirm.status).toBe(200);
     expect(secondConfirm.body.status).toBe('matched');
@@ -205,12 +212,12 @@ describe('Phase 4 — co-presence confirmation flow', () => {
     const userB = await createUser('P4 IdemB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie);
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie).set('X-CSRF-Token', userB.csrf);
 
     // Re-confirm from both sides again.
-    const reconfirmA = await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie);
-    const reconfirmB = await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie);
+    const reconfirmA = await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf);
+    const reconfirmB = await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie).set('X-CSRF-Token', userB.csrf);
 
     expect(reconfirmA.status).toBe(200);
     expect(reconfirmA.body.status).toBe('matched');
@@ -231,7 +238,8 @@ describe('Phase 4 — co-presence confirmation flow', () => {
 
     const rejectRes = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/reject`)
-      .set('Cookie', userB.cookie);
+      .set('Cookie', userB.cookie)
+      .set('X-CSRF-Token', userB.csrf);
     expect(rejectRes.status).toBe(200);
 
     const stillThere = await CoPresenceCandidate.findById(candidate._id);
@@ -242,7 +250,8 @@ describe('Phase 4 — co-presence confirmation flow', () => {
 
     const confirmAfterReject = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/confirm`)
-      .set('Cookie', userA.cookie);
+      .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf);
     expect(confirmAfterReject.status).toBe(404);
   });
 
@@ -251,12 +260,13 @@ describe('Phase 4 — co-presence confirmation flow', () => {
     const userB = await createUser('P4 NoUnmatchB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie);
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie).set('X-CSRF-Token', userB.csrf);
 
     const rejectAfterMatch = await request(baseURL)
       .post(`/api/copresence/${candidate._id}/reject`)
-      .set('Cookie', userA.cookie);
+      .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf);
     expect(rejectAfterMatch.status).toBe(400);
 
     const matchCount = await CoPresenceMatch.countDocuments({

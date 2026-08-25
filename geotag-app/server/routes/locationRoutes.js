@@ -3,9 +3,10 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const User = require('../models/users');
 const verifyToken = require('../middleware/verifyToken');
+const { socialActionLimiter } = require('../middleware/rateLimiter');
 const jwt = require('jsonwebtoken');
 
-router.post('/sethome', verifyToken, async (req, res) => {
+router.post('/sethome', socialActionLimiter, verifyToken, async (req, res) => {
   try {
     //Find user by ID
     const user = await User.findById(req.userId);
@@ -22,7 +23,7 @@ router.post('/sethome', verifyToken, async (req, res) => {
 
     res.json({ message: 'Home location saved successfully', home: user.home });
   } catch (err) {
-    console.error('Error saving location:', err);
+    req.log.error({ err }, 'Error saving location');
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -34,7 +35,7 @@ try{
  res.status(200).json(user.home);
 } 
 catch(err){
- console.error('Error fetching home location:', err);
+ req.log.error({ err }, 'Error fetching home location');
  res.status(500).json({ message: 'Server error' });
 }
 });

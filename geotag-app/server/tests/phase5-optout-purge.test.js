@@ -43,8 +43,11 @@ async function createUser(name) {
     .post('/api/auth/signup')
     .send({ name, email, password: 'correct-horse-battery' });
   const cookie = signupRes.headers['set-cookie'].find((c) => c.startsWith('token=')).split(';')[0];
+  // CSRF fix (BE-002): every mutating request now needs this exact value as an
+  // X-CSRF-Token header — see middleware/verifyToken.js.
+  const csrf = signupRes.body.csrfToken;
   const navbarRes = await request(baseURL).get('/api/user/navbar').set('Cookie', cookie);
-  return { id: navbarRes.body._id, cookie };
+  return { id: navbarRes.body._id, cookie, csrf };
 }
 
 async function makeMemory(userId, lng) {
@@ -80,6 +83,7 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     const res = await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf)
       .send({ optIn: false });
     expect(res.status).toBe(200);
 
@@ -92,11 +96,12 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     const userB = await createUser('P5 HalfB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie).set('X-CSRF-Token', userB.csrf);
 
     await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf)
       .send({ optIn: false });
 
     const stillThere = await CoPresenceCandidate.findById(candidate._id);
@@ -108,8 +113,8 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     const userB = await createUser('P5 MatchedB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie);
-    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf);
+    await request(baseURL).post(`/api/copresence/${candidate._id}/confirm`).set('Cookie', userB.cookie).set('X-CSRF-Token', userB.csrf);
 
     const matchBefore = await CoPresenceMatch.findOne({ memoryA: candidate.memoryA, memoryB: candidate.memoryB });
     expect(matchBefore).toBeTruthy();
@@ -117,6 +122,7 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf)
       .send({ optIn: false });
 
     const matchAfter = await CoPresenceMatch.findOne({ memoryA: candidate.memoryA, memoryB: candidate.memoryB });
@@ -136,6 +142,7 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf)
       .send({ optIn: false });
 
     expect(await CoPresenceCandidate.findById(ownCandidate._id)).toBeNull();
@@ -147,12 +154,13 @@ describe('Phase 5 — opting out purges pending candidates', () => {
     const userB = await createUser('P5 ReoptB');
     const candidate = await seedCandidate(userA.id, userB.id);
 
-    await request(baseURL).patch('/api/user/co-presence-opt-in').set('Cookie', userA.cookie).send({ optIn: false });
+    await request(baseURL).patch('/api/user/co-presence-opt-in').set('Cookie', userA.cookie).set('X-CSRF-Token', userA.csrf).send({ optIn: false });
     expect(await CoPresenceCandidate.findById(candidate._id)).toBeNull();
 
     const reopt = await request(baseURL)
       .patch('/api/user/co-presence-opt-in')
       .set('Cookie', userA.cookie)
+      .set('X-CSRF-Token', userA.csrf)
       .send({ optIn: true });
     expect(reopt.status).toBe(200);
     expect(reopt.body.coPresenceOptIn).toBe(true);

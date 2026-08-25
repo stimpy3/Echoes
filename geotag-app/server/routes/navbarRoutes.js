@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middleware/verifyToken');
+const { socialActionLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/users');
 const CoPresenceCandidate = require('../models/coPresenceCandidate');
 const { invalidateCache } = require('../utils/cache');
@@ -19,7 +20,7 @@ router.get('/navbar', verifyToken, async (req, res) => {
 });
 
 // Update privacy status
-router.patch('/privacy', verifyToken, async (req, res) => {
+router.patch('/privacy', socialActionLimiter, verifyToken, async (req, res) => {
   try {
     const { isPrivate } = req.body;
     const user = await User.findByIdAndUpdate(req.userId, { isPrivate }, { new: true }).select('isPrivate');
@@ -49,7 +50,7 @@ smaller decision than retroactively undoing a past mutual confirmation — the r
 plan leaves that second, bigger decision for a later phase to define on purpose, not as
 an oversight here.
 */
-router.patch('/co-presence-opt-in', verifyToken, async (req, res) => {
+router.patch('/co-presence-opt-in', socialActionLimiter, verifyToken, async (req, res) => {
   try {
     const { optIn } = req.body;
     if (typeof optIn !== 'boolean') {

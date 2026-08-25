@@ -68,54 +68,92 @@ module.exports = (io) => {
         return;
       }
 
+      let chat;
+      let savedMessage;
+
       try {
-        let chat = chatId
-          ? await Chat.findById(chatId)
-          : await Chat.findOne({ participants: { $all: [userId, receiverId] } });
+        // Audit finding BE-016: only look up an EXISTING chat by chatId here — the
+        // no-chatId "brand-new conversation" path goes through Chat.findOrCreateForPair
+        // (models/chat.js), which is atomic and unique-index-backed, so two concurrent
+        // first-messages between the same two users can no longer create two separate
+        // Chat documents for the same pair.
+        chat = chatId ? await Chat.findById(chatId) : null;
 
         if (!chat) {
-          chat = await Chat.create({ participants: [userId, receiverId] });
+          chat = await Chat.findOrCreateForPair(userId, receiverId);
         }
 
-        const savedMessage = await Message.create({
+        savedMessage = await Message.create({
           chatId: chat._id,
           sender: userId,
           text: message,
         });
-
-        chat.lastMessage = message;
-        chat.updatedAt = new Date();
-        chat.unreadCount.set(receiverId, (chat.unreadCount.get(receiverId) || 0) + 1);
-        await chat.save();
-
-        const liveMessage = {
-          _id: savedMessage._id,
-          chatId: chat._id,
-          sender: userId,
-          text: savedMessage.text,
-          readBy: savedMessage.readBy,
-          createdAt: savedMessage.createdAt,
-        };
-
-        // Every socket the receiver has open, on any instance.
-        io.to(receiverId).emit("newMessage", {
-          ...liveMessage,
-          isOwn: false
-        });
-
-        // socket.to() (unlike io.to()) automatically excludes the emitting socket —
-        // this reaches the sender's OTHER open tabs; this one gets the same data via
-        // the ack callback below instead, so it isn't delivered the message twice.
-        socket.to(userId).emit("newMessage", {
-          ...liveMessage,
-          isOwn: true
-        });
-
-        if (callback) callback({ success: true, message: liveMessage });
       } catch (err) {
-        socketLogger.error({ err, userId, receiverId }, 'sendMessage failed');
+        socketLogger.error({ err, userId, receiverId }, 'sendMessage failed before the message was persisted');
         if (callback) callback({ success: false, error: 'Failed to send message' });
+        return;
       }
+
+      /*
+      Audit finding BE-009. Everything above this point is the one write that MUST
+      succeed before anything is reported as sent — the message itself, now durably in
+      Mongo. Everything below is denormalized convenience (Chat.lastMessage/
+      unreadCount, read only for chat-list previews) and is deliberately NOT allowed to
+      turn an already-real message into a reported failure.
+
+      This isn't wrapped in a multi-document transaction — this app's MongoDB isn't
+      provisioned as a replica set, which transactions require — so the two writes
+      can't be made atomic outright. Separating them like this is what actually matters
+      for correctness here, though: without it, a failure in this second step used to
+      throw into the same catch as message creation and tell the client the send
+      failed, even though the message had already been saved. A client that believes
+      its send failed is liable to retry it — creating a genuine duplicate message,
+      since nothing here deduplicates by a client-generated id. Losing a chat-list
+      preview update once is a far smaller, self-healing problem: the next real message
+      into this chat overwrites it regardless.
+
+      The update itself is also now a single atomic findByIdAndUpdate ($inc/$set)
+      rather than the old fetch-then-.save() — that read-modify-write let two
+      concurrent messages into the SAME chat race and lose one side's unreadCount
+      increment (the exact shape of bug BE-005 fixed elsewhere in this codebase); an
+      $inc against the document directly can't lose a concurrent update the same way.
+      */
+      try {
+        await Chat.findByIdAndUpdate(chat._id, {
+          $set: { lastMessage: message, updatedAt: new Date() },
+          $inc: { [`unreadCount.${receiverId}`]: 1 },
+        });
+      } catch (err) {
+        socketLogger.error(
+          { err, userId, receiverId, chatId: chat._id },
+          'sendMessage: chat summary update failed after the message was already saved'
+        );
+      }
+
+      const liveMessage = {
+        _id: savedMessage._id,
+        chatId: chat._id,
+        sender: userId,
+        text: savedMessage.text,
+        readBy: savedMessage.readBy,
+        createdAt: savedMessage.createdAt,
+      };
+
+      // Every socket the receiver has open, on any instance.
+      io.to(receiverId).emit("newMessage", {
+        ...liveMessage,
+        isOwn: false
+      });
+
+      // socket.to() (unlike io.to()) automatically excludes the emitting socket —
+      // this reaches the sender's OTHER open tabs; this one gets the same data via
+      // the ack callback below instead, so it isn't delivered the message twice.
+      socket.to(userId).emit("newMessage", {
+        ...liveMessage,
+        isOwn: true
+      });
+
+      if (callback) callback({ success: true, message: liveMessage });
     });
 
     // TYPING INDICATOR - User started typing

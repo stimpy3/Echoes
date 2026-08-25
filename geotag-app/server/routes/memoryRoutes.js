@@ -4,10 +4,16 @@ const Memory = require('../models/memories');
 const User = require('../models/users');
 const Follower = require('../models/follower');
 const verifyToken = require('../middleware/verifyToken');
+const { memoryMutationLimiter, socialActionLimiter } = require('../middleware/rateLimiter');
 const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
 const { generateEmbeddingWithRetry } = require('../utils/embeddingHelper');
 const { enqueueEmbeddingJob } = require('../queues/embeddingQueue');
 const { enqueueImageEmbeddingJob } = require('../queues/imageEmbeddingQueue');
+const { resolveLimit } = require('../utils/pagination');
+
+// Audit finding BE-011 — see utils/pagination.js.
+const DEFAULT_MEMORY_LIST_LIMIT = 200;
+const MAX_MEMORY_LIST_LIMIT = 500;
 
 const buildProjectionStage = {
     $project: {
@@ -38,6 +44,41 @@ const buildPrivacyMatch = (followingIds) => ({
         ]
     }
 });
+
+/*
+Security fix (audit finding BE-004). GET /single/:id, POST /like/:id, and
+POST /comment/:id fetched or mutated a Memory document with no privacy/ownership check
+at all — any authenticated user, any memory id, private account or not, followed or not.
+Every LISTING route in this file (profile grid, Explore's three streams, all three
+fallback tiers) enforces the exact same rule via buildPrivacyMatch() inside the
+aggregation; GET /user/:id enforces it too, inline. This is that same rule, extracted
+once so these three by-ID routes can't each reinvent (or subtly mis-invent) it.
+
+Mirrors GET /user/:id's own inline check exactly: the owner can always act on their own
+memory; otherwise, a public account's memories are visible to anyone; a private
+account's are visible only to an approved follower. Writes res directly and returns a
+boolean so call sites stay a two-line guard clause, matching this file's existing style.
+*/
+const assertCanAccessMemory = async (memoryUserId, currentUserId, res) => {
+    const authorId = memoryUserId.toString();
+    if (authorId === currentUserId) return true;
+
+    const author = await User.findById(authorId).select('isPrivate');
+    if (!author) {
+        res.status(404).json({ message: 'Memory not found' });
+        return false;
+    }
+
+    if (author.isPrivate) {
+        const isFollowing = await Follower.exists({ follower: currentUserId, following: authorId });
+        if (!isFollowing) {
+            res.status(403).json({ message: 'This account is private' });
+            return false;
+        }
+    }
+
+    return true;
+};
 
 const buildGlobalPublicPipeline = ({ currentUserObjectId, limit = 30 }) => ([
     {
@@ -157,7 +198,7 @@ const attachReason = (memories, reasonText, source) => memories.map((memory) => 
     recommendationSource: source
 }));
 
-router.post('/creatememory', verifyToken, upload.single('photo'), async (req, res) => {
+router.post('/creatememory', memoryMutationLimiter, verifyToken, upload.single('photo'), async (req, res) => {
     try {
         const userId = req.userId;
         // With multer, text fields are available in req.body
@@ -217,6 +258,20 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
             req.log.error({ err, memoryId: savedMemory._id }, 'Failed to enqueue image embedding job');
         }
     } catch (err) {
+        /*
+        Bug fix (audit finding BE-006). A Mongoose ValidationError (e.g. a missing
+        required field like location.address) is caused entirely by the client's own
+        request — it isn't a server failure, and reporting it as one (500) hid the real
+        problem from the caller. Distinguishing on err.name (Mongoose's own marker for
+        this error class, not an `instanceof` check that would need importing mongoose
+        into this file just for that) and returning 400 with the actual validation
+        message is the same information the server already had; this just stops
+        discarding it.
+        */
+        if (err.name === 'ValidationError') {
+            req.log.warn({ err }, 'Memory creation rejected — invalid input');
+            return res.status(400).json({ message: err.message });
+        }
         req.log.error({ err }, 'Memory creation error');
         res.status(500).json({ message: 'Server failed to create memory' });
     }
@@ -225,7 +280,8 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
 //this one is to get memories of logged-in user for MemoriesPage
 router.get('/fetchmemory',verifyToken,async(req,res)=>{
     try{
-        const memories= await Memory.find({userId:req.userId}).sort({createdAt:-1});
+        const limit = resolveLimit(req, { defaultLimit: DEFAULT_MEMORY_LIST_LIMIT, maxLimit: MAX_MEMORY_LIST_LIMIT });
+        const memories= await Memory.find({userId:req.userId}).sort({createdAt:-1}).limit(limit);
         res.status(200).json({memories});
     }
     catch(err){
@@ -261,7 +317,8 @@ router.get('/user/:id', verifyToken, async (req, res) => {
         }
     }
 
-    const memories = await Memory.find({ userId: profileUserId }).sort({ createdAt: -1 });
+    const limit = resolveLimit(req, { defaultLimit: DEFAULT_MEMORY_LIST_LIMIT, maxLimit: MAX_MEMORY_LIST_LIMIT });
+    const memories = await Memory.find({ userId: profileUserId }).sort({ createdAt: -1 }).limit(limit);
     res.status(200).json({ memories });
   } catch (err) {
     req.log.error({ err }, 'Server error fetching user memories');
@@ -271,7 +328,7 @@ router.get('/user/:id', verifyToken, async (req, res) => {
 
 
 
-router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req, res) => {
+router.patch('/editmemory/:id', memoryMutationLimiter, verifyToken, upload.single('photo'), async (req, res) => {
     try {
         const memoryId = req.params.id;
         const { title, description } = req.body;
@@ -335,7 +392,7 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
     }
 });
 
-router.delete('/deletememory/:id', verifyToken, async (req, res) => {
+router.delete('/deletememory/:id', memoryMutationLimiter, verifyToken, async (req, res) => {
     try {
         const memoryId = req.params.id;
         const memory = await Memory.findOne({ _id: memoryId, userId: req.userId });
@@ -368,9 +425,22 @@ router.delete('/deletememory/:id', verifyToken, async (req, res) => {
 
 
 
+/*
+Security fix (audit finding BE-017). This route used to trust `userIds` from the
+request body completely — any authenticated caller could pass ANY user's id, private
+account or not, followed or not, and get their full memory list back (title,
+description, exact GPS coordinates, photo URL). Verified live: a stranger with zero
+follow relationship to a private account retrieved that account's memories in full,
+while the already-fixed BE-004 routes (`/single/:id` etc.) correctly blocked the same
+stranger for the same memory. The real client (HomePage.jsx) only ever sends the
+caller's own following list, but nothing server-side enforced that — this closes the
+gap at the query itself, the same buildPrivacyMatch() pattern every other listing
+surface in this file already uses, rather than trusting the caller's input.
+*/
 router.post('/friendMemory', verifyToken, async (req, res) => {
   try {
     const mongoose = require("mongoose");
+    const currentUserId = req.userId;
 
     const { userIds } = req.body;
 
@@ -383,6 +453,13 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
     const objectIds = userIds.map(
       id => new mongoose.Types.ObjectId(id)
     );
+
+    // Same trust boundary as every other listing route: a public account's memories
+    // are visible to anyone, a private account's only to an approved follower (or the
+    // caller viewing their own).
+    const followingDocs = await Follower.find({ follower: currentUserId }).select('following');
+    const followingIds = followingDocs.map(f => f.following);
+    followingIds.push(new mongoose.Types.ObjectId(currentUserId));
 
     const result = await Memory.aggregate([
       // 1. Only memories from selected users
@@ -398,14 +475,16 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
           from: "users",          // collection name (plural!)
           localField: "userId",
           foreignField: "_id",
-          as: "user"
+          as: "userDoc"
         }
       },
 
       // 3. Flatten user array
       {
-        $unwind: "$user"
+        $unwind: "$userDoc"
       },
+
+      buildPrivacyMatch(followingIds),
 
       // 4. Group by user
       {
@@ -413,8 +492,8 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
           _id: "$userId",
           user: {
             $first: {
-              name: "$user.name",
-              profilePic: "$user.profilePic"
+              name: "$userDoc.name",
+              profilePic: "$userDoc.profilePic"
             }
           },
           memories: {
@@ -453,13 +532,14 @@ router.post('/friendMemory', verifyToken, async (req, res) => {
 });
 
 // Like/Unlike memory
-router.post('/like/:id', verifyToken, async (req, res) => {
+router.post('/like/:id', socialActionLimiter, verifyToken, async (req, res) => {
     try {
         const memoryId = req.params.id;
         const userId = req.userId;
 
         const memory = await Memory.findById(memoryId);
         if (!memory) return res.status(404).json({ message: 'Memory not found' });
+        if (!(await assertCanAccessMemory(memory.userId, userId, res))) return;
 
         const likeIndex = memory.likes.indexOf(userId);
         if (likeIndex === -1) {
@@ -477,7 +557,7 @@ router.post('/like/:id', verifyToken, async (req, res) => {
 });
 
 // Add comment
-router.post('/comment/:id', verifyToken, async (req, res) => {
+router.post('/comment/:id', socialActionLimiter, verifyToken, async (req, res) => {
     try {
         const memoryId = req.params.id;
         const { text } = req.body;
@@ -485,6 +565,7 @@ router.post('/comment/:id', verifyToken, async (req, res) => {
 
         const memory = await Memory.findById(memoryId);
         if (!memory) return res.status(404).json({ message: 'Memory not found' });
+        if (!(await assertCanAccessMemory(memory.userId, req.userId, res))) return;
 
         memory.comments.push({ userId: req.userId, text });
         await memory.save();
@@ -506,8 +587,12 @@ router.get('/single/:id', verifyToken, async (req, res) => {
         const memory = await Memory.findById(req.params.id)
             .populate('userId', 'name profilePic')
             .populate('comments.userId', 'name profilePic');
-        
+
         if (!memory) return res.status(404).json({ message: 'Memory not found' });
+        // memory.userId is populated here (an object), unlike the like/comment routes
+        // above — .populate() doesn't change the underlying _id, so this still works.
+        if (!(await assertCanAccessMemory(memory.userId._id, req.userId, res))) return;
+
         res.status(200).json(memory);
     } catch (err) {
         req.log.error({ err }, 'Server error fetching memory');

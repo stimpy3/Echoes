@@ -43,10 +43,31 @@ const DEFAULT_VISUAL_SIMILARITY_THRESHOLD = 0.6;
  * Mutual-follow pairs among users who have BOTH opted in. Bounded by maxPairs so the
  * job's cost can't grow unboundedly as the opted-in population grows — see the rollout
  * plan's Phase 2 notes on why this is a hard cap, not a soft suggestion.
+ *
+ * Audit finding BE-008: the initial User.find({ coPresenceOptIn: true }) had no limit
+ * at all — maxPairs only bounded the OUTPUT of this function, after the full opted-in
+ * population (and then a Follower $in/$in query sized off of it) had already been
+ * pulled into memory. As the opted-in population grows, that first query's cost grows
+ * unboundedly even though the job's eventual output stays capped — maxOptedInUsers caps
+ * the input the same deliberate way maxPairs already caps the output. A stable sort
+ * (by _id) makes which users get truncated, if the cap is ever hit, consistent run to
+ * run rather than arbitrary.
  */
-async function findEligibleMutualPairs({ maxPairs = 500 } = {}) {
-  const optedInUsers = await User.find({ coPresenceOptIn: true }).select('_id').lean();
+async function findEligibleMutualPairs({ maxPairs = 500, maxOptedInUsers = 5000 } = {}) {
+  const optedInUsers = await User.find({ coPresenceOptIn: true })
+    .select('_id')
+    .sort({ _id: 1 })
+    .limit(maxOptedInUsers)
+    .lean();
   const optedInIds = optedInUsers.map((u) => u._id);
+
+  if (optedInIds.length === maxOptedInUsers) {
+    logger.warn(
+      { maxOptedInUsers },
+      'co-presence candidate job: opted-in user count hit maxOptedInUsers — some eligible users were not considered this run'
+    );
+  }
+
   if (optedInIds.length < 2) return [];
 
   // Edges among opted-in users ONLY — a follow edge involving anyone who hasn't opted
@@ -185,6 +206,7 @@ async function runCoPresenceCandidateJob(options = {}) {
 
   const {
     maxPairs = 500,
+    maxOptedInUsers = 5000,
     maxMemoriesPerUser = 200,
     proximityMeters = 200,
     timeWindowMinutes = 30,
@@ -192,7 +214,7 @@ async function runCoPresenceCandidateJob(options = {}) {
     visualSimilarityThreshold = DEFAULT_VISUAL_SIMILARITY_THRESHOLD,
   } = options;
 
-  const pairs = await findEligibleMutualPairs({ maxPairs });
+  const pairs = await findEligibleMutualPairs({ maxPairs, maxOptedInUsers });
 
   let candidatesWritten = 0;
   let candidatesSkippedDuplicate = 0;

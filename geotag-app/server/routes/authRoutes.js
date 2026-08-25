@@ -1,13 +1,37 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const User = require('../models/users');
 const jwt = require('jsonwebtoken');
 const { loginLimiter, signupLimiter, googleAuthLimiter } = require('../middleware/rateLimiter');
+const { denylistToken } = require('../utils/tokenDenylist');
+
+/*
+Security fix (audit finding BE-002 — CSRF on body-less mutation routes). The classic
+double-submit-cookie CSRF defense doesn't actually work in this app's architecture: the
+frontend (Vercel) and API (Render) are on different origins, and a cookie set by the API
+is scoped to the API's origin — client-side JS running on the FRONTEND origin can never
+read it via document.cookie, regardless of httpOnly. So instead, the CSRF token is
+embedded as a claim INSIDE the JWT itself (httpOnly, unreadable by any script) and handed
+to the legitimate client exactly once, in the JSON response body of signup/login/google —
+a normal same-origin-to-the-client, CORS-permitted response a forged cross-site request
+can never see. verifyToken.js then requires this same value back as an X-CSRF-Token
+header on every mutating request. A forged cross-site form submission still gets the
+httpOnly cookie attached automatically by the browser (that part was never preventable),
+but a plain HTML form cannot set a custom header at all — so it can never supply the
+matching X-CSRF-Token, closing the gap structurally rather than by trusting SameSite alone.
+*/
+const generateCsrfToken = () => crypto.randomBytes(24).toString('hex');
 
 // Helper to create token
-const createToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+// `jti` (audit finding BE-013): a random id unique to THIS token, minted at issuance —
+// see utils/tokenDenylist.js for why it exists. A pre-fix token has no jti and is
+// simply never denylistable, the same fail-closed-on-missing-claim posture BE-002's
+// csrf claim already established for this codebase.
+const createToken = (userId, csrfToken) => {
+  const jti = crypto.randomBytes(16).toString('hex');
+  return jwt.sign({ id: userId, csrf: csrfToken, jti }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }; //token consists of HEADER.PAYLOAD.SIGNATURE
 //jwt.sign(payload, secretOrPrivateKey, [options, callback]) sign means genarate signature
 /*
@@ -79,8 +103,9 @@ router.post('/signup', signupLimiter, async (req, res) => {
     // Pros: Shorter, cleaner syntax.Great if you don’t need to manipulate the document before saving
 
 
-     const token = createToken(user._id); // calls the function I defined before createToken is user defined function
-     
+     const csrfToken = generateCsrfToken();
+     const token = createToken(user._id, csrfToken); // calls the function I defined before createToken is user defined function
+
       res.cookie('token', token, {
       httpOnly: true, //JS on the frontend cannot read the cookie. Only sent in HTTP requests. Protects your token from XSS.
       //Browser JavaScript cannot read document.cookie to get this cookie.Defends against XSS(an attacker’s injected script can’t steal the cookie
@@ -113,7 +138,7 @@ path (default '/') : URL path the cookie applies to. If path: '/api', browser se
 domain: Restricts cookie to a domain. Use example.com to include subdomains (app.example.com), or omit to scope to the current host.
      */
 
-    res.status(201).json({ message: 'Account Created' });
+    res.status(201).json({ message: 'Account Created', csrfToken });
   } catch (err) {
     // Previously unlogged — a failed signup produced zero server-side trace, only the
     // client-facing error message. Now traceable by the request id like everything else.
@@ -141,7 +166,8 @@ router.post('/login', loginLimiter, async(req,res)=>{
     if (!isMatch){
       return res.status(401).json({message:"Invalid password"});
     }
-    const token=createToken(user._id);
+    const csrfToken = generateCsrfToken();
+    const token=createToken(user._id, csrfToken);
 
     res.cookie('token', token,{
       httpOnly:true,
@@ -156,7 +182,7 @@ router.post('/login', loginLimiter, async(req,res)=>{
     Browser sees that → stores the cookie → attaches it automatically on future requests.
     */
 
-    res.status(200).json({message:'Login successful'});
+    res.status(200).json({message:'Login successful', csrfToken});
   }
   catch(err){
     // Same gap as signup — was silent before, now traceable by request id.
@@ -168,7 +194,32 @@ router.post('/login', loginLimiter, async(req,res)=>{
 
 
 //LOGOUT route
-router.post('/logout', (req, res) => {
+/*
+Audit finding BE-013 fix. Previously this only ever cleared the cookie client-side — the
+JWT itself stayed valid for its full remaining lifetime even after "logging out," so a
+copy of it (stolen from a device, leaked in a log) kept working regardless. Now, if the
+request actually carries a still-decodable token, its jti is denylisted for exactly its
+remaining lifetime (see utils/tokenDenylist.js), so THIS token is really dead — not just
+removed from the browser that logged out.
+
+Deliberately best-effort about the token itself: an already-invalid/expired/tampered
+token, or no cookie at all, still gets a normal 200 — logout's job is "make sure the
+user is logged out," and a token with nothing meaningful left to revoke is already
+consistent with that, not an error condition.
+*/
+router.post('/logout', async (req, res) => {
+  const token = req.cookies?.token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+      if (decoded.jti && decoded.exp) {
+        const expSeconds = decoded.exp - Math.floor(Date.now() / 1000);
+        await denylistToken(decoded.jti, expSeconds, req.log);
+      }
+    } catch (err) {
+      // Already invalid/expired/tampered — nothing meaningful left to revoke.
+    }
+  }
   res.clearCookie('token');
   res.status(200).json({ message: 'Logged out successfully' });
 });
@@ -184,14 +235,29 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 router.post('/google', googleAuthLimiter, async (req, res) => {
   const { token } = req.body; // Frontend sends the ID token from Google
 
+  /*
+  Audit finding BE-014 fix. verifyIdToken is the ONLY step that can actually fail
+  because the token itself is invalid — everything after it (Mongo lookups/writes,
+  cookie signing) can fail for completely unrelated reasons, but used to share the same
+  catch block, so a database blip came back to the client as "Invalid Google token,"
+  which is simply false and sends whoever's debugging it looking in the wrong place.
+  Splitting this into its own try/catch lets that specific failure keep the 401 +
+  message that's actually correct for it, while everything else falls through to the
+  outer catch as the generic server error it actually is.
+  */
+  let payload;
   try {
-    // Verify the token with Google
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
+    payload = ticket.getPayload();
+  } catch (err) {
+    req.log.warn({ err }, 'Google auth: token verification failed');
+    return res.status(401).json({ message: 'Invalid Google token' });
+  }
 
-    const payload = ticket.getPayload();
+  try {
     const { email, name, picture, sub } = payload; //'sub' = Google unique user ID
 
     // Check if user already exists
@@ -211,7 +277,8 @@ router.post('/google', googleAuthLimiter, async (req, res) => {
     }
 
     // Create your own JWT token for session management
-    const jwtToken = createToken(user._id);
+    const csrfToken = generateCsrfToken();
+    const jwtToken = createToken(user._id, csrfToken);
 
     res.cookie('token', jwtToken, {
       httpOnly: true,
@@ -227,17 +294,17 @@ router.post('/google', googleAuthLimiter, async (req, res) => {
         email: user.email,
         profilePic: user.profilePic,
       },
-      isNewUser
+      isNewUser,
+      csrfToken
     });
   } catch (err) {
-    // This is the exact catch that mislabeled a MongoDB connectivity failure as "Invalid
-    // Google token" earlier — it still does; that's a separate, not-yet-fixed bug (the
-    // response always claims token failure regardless of what actually broke). What
-    // changes here: err.name/err.message are now logged with the request id, so "was
-    // this really a bad token or was Mongo down" is answerable from the logs even though
-    // the client-facing message doesn't yet distinguish the two.
-    req.log.error({ err }, 'Google auth error');
-    res.status(401).json({ message: 'Invalid Google token', error: err.message });
+    // Everything in this block runs only after the Google token itself was already
+    // verified above — a failure here (a Mongo blip, a write conflict) is a real server
+    // error, not a bad token, and is now reported as one instead of the misleading
+    // "Invalid Google token" this used to share with the actual token-verification
+    // failure above.
+    req.log.error({ err }, 'Google auth: server error after token verification');
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

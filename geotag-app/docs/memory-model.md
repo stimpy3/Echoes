@@ -11,6 +11,7 @@ const memorySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
+  category: { type: String, enum: ["Travel","Nature","Food","Events","People","Milestones","Culture","Other"] },
   location: {
     type: {
       type: String,
@@ -22,11 +23,23 @@ const memorySchema = new mongoose.Schema({
     address: { type: String, required: true }
   },
   photoUrl: { type: String, required: true },
+  embedding: { type: [Number], select: false }, // text embedding for semantic search/recommendations
+  imageEmbedding: { type: [Number], select: false }, // CLIP embedding, powers co-presence visual similarity
+  likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  comments: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 
-// 2dsphere index for geospatial queries
+// 2dsphere index for geospatial queries, plus compound indexes on the two other
+// hot query shapes (own memories by recency, liked memories by recency) — see
+// server/models/memories.js for why those are compound rather than single-field.
 memorySchema.index({ location: '2dsphere' });
+memorySchema.index({ userId: 1, createdAt: -1 });
+memorySchema.index({ likes: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Memory', memorySchema);
 
@@ -101,13 +114,19 @@ Example Memory Document
   "userId": "671e9876...",
   "title": "Trip to Goa",
   "description": "Sunset at the beach",
+  "category": "Travel",
   "location": {
     "type": "Point",
     "coordinates": [73.8567, 15.2993],
     "address": "Goa, India"
   },
   "photoUrl": "https://example.com/photo.jpg",
+  "likes": [],
+  "comments": [],
   "createdAt": "2025-10-26T12:00:00Z"
+  // embedding / imageEmbedding omitted here — both are select:false in the real
+  // schema (never returned unless explicitly selected), so they never appear in a
+  // normal query result the way every other field above does.
 }
 
 ------------------------------------------------------------

@@ -4,7 +4,11 @@ const FollowRequest = require('../models/followRequest');
 const Follower = require("../models/follower");
 const verifyToken=require('../middleware/verifyToken');
 const { getOrSetCache } = require('../utils/cache');
+const { resolveLimit } = require('../utils/pagination');
 
+// Audit finding BE-011 — see utils/pagination.js.
+const DEFAULT_FOLLOW_LIST_LIMIT = 200;
+const MAX_FOLLOW_LIST_LIMIT = 500;
 
 const router=express.Router();
 
@@ -43,7 +47,7 @@ router.get("/suggestions", verifyToken, async (req, res) => {
     res.status(200).json(suggestions);
 
   } catch (err) {
-    console.error("Error fetching suggestions:", err);
+    req.log.error({ err }, 'Error fetching suggestions');
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -53,11 +57,15 @@ router.get("/suggestions", verifyToken, async (req, res) => {
 router.get("/followers", verifyToken, async (req, res) => {
   try {
     const currentUserId = req.userId;
-    const followersDocs = await Follower.find({ following: currentUserId }).populate("follower", "name email profilePic");
+    const limit = resolveLimit(req, { defaultLimit: DEFAULT_FOLLOW_LIST_LIMIT, maxLimit: MAX_FOLLOW_LIST_LIMIT });
+    const followersDocs = await Follower.find({ following: currentUserId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("follower", "name email profilePic");
     const followers = followersDocs.map(doc => doc.follower);
     res.json(followers);
   } catch (err) {
-    console.error("Error fetching followers:", err);
+    req.log.error({ err }, 'Error fetching followers');
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -66,11 +74,15 @@ router.get("/followers", verifyToken, async (req, res) => {
 router.get("/following", verifyToken, async (req, res) => {
   try {
     const currentUserId = req.userId;
-    const followingDocs = await Follower.find({ follower: currentUserId }).populate("following", "name email profilePic");
+    const limit = resolveLimit(req, { defaultLimit: DEFAULT_FOLLOW_LIST_LIMIT, maxLimit: MAX_FOLLOW_LIST_LIMIT });
+    const followingDocs = await Follower.find({ follower: currentUserId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("following", "name email profilePic");
     const following = followingDocs.map(doc => doc.following);
     res.json(following);
   } catch (err) {
-    console.error("Error fetching following:", err);
+    req.log.error({ err }, 'Error fetching following');
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -89,7 +101,7 @@ router.get("/:userId/follow-counts", verifyToken, async (req, res) => {
     res.json({ followerCount, followingCount });
 
   } catch (err) {
-    console.error("Error fetching follow counts:", err);
+    req.log.error({ err }, 'Error fetching follow counts');
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -130,31 +142,49 @@ router.get("/status/:userId", verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Follow status check error:", err);
+    req.log.error({ err }, 'Follow status check error');
     res.status(500).json({ message: "Server error" });
   }
 });
 
 
-// GET /api/users/:id → get user by ID
-// Cached: this is hit on every profile view, follower list, memory card, etc. — anywhere
-// another user's name/pic/privacy is shown. 5 min TTL: short enough that a changed name
-// or privacy toggle is never stale for long, long enough to absorb repeat views of the
-// same profile in a session. Invalidated explicitly on the one write that changes this
-// payload — navbarRoutes.js's PATCH /privacy — see the cacheKey comment there.
+/*
+Security fix (audit finding BE-018). This route used to select and return `email` and
+`home` for ANY user id to ANY authenticated caller, with no privacy or follow check at
+all — verified live: a stranger with zero follow relationship to a PRIVATE account
+retrieved that account's exact home GPS coordinates and email address, both with a
+plain 200. `home` in particular is dead weight for this route specifically: grep
+confirms the client (ProfilePage.jsx) never reads `user.home` from this response at
+all — a viewer's own home for centering THEIR OWN map already comes from the correctly
+self-scoped GET /api/user/gethome. There is no legitimate reason for this endpoint to
+ever return anyone's home coordinates but their own, regardless of public/private.
+
+Split into two pieces because of the cache: the cached, viewer-agnostic base payload
+(name/profilePic/isPrivate) is safe for anyone to see about anyone — matches the
+"identity is visible even for a private account, only its CONTENT is gated" model this
+app already uses everywhere else (you can see a private account's name/pic and follow-
+request them, the same way findEligibleMutualPairs, buildPrivacyMatch, etc. all treat
+identity vs. content differently). `email` depends on the SPECIFIC caller's relationship
+to this user, so it can't live in a cache key shared by every viewer — computed fresh
+per request instead, included only for the owner, an approved follower, or any viewer
+of a public account (matching this app's existing "public = visible to anyone" contract
+for every other content type). `home` is simply never included for anyone but the owner.
+*/
 router.get('/:id', verifyToken, async (req, res) => {
   try {
     const userId = req.params.id; // ID from URL
+    const currentUserId = req.userId;
+    const isOwner = userId === currentUserId;
 
-    const payload = await getOrSetCache(`user:${userId}`, 300, async () => {
-      let user = await User.findById(userId).select('_id name email profilePic home isPrivate');
+    const basePayload = await getOrSetCache(`user:${userId}`, 300, async () => {
+      let user = await User.findById(userId).select('_id name profilePic isPrivate');
 
       if (!user) return null;
 
       // Backfill older documents that do not have isPrivate yet
       if (typeof user.isPrivate === 'undefined') {
         await User.updateOne({ _id: userId }, { $set: { isPrivate: false } });
-        user = await User.findById(userId).select('_id name email profilePic home isPrivate');
+        user = await User.findById(userId).select('_id name profilePic isPrivate');
       }
 
       const obj = user.toObject();
@@ -162,13 +192,30 @@ router.get('/:id', verifyToken, async (req, res) => {
       return obj;
     }, req.log);
 
-    if (!payload) {
+    if (!basePayload) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    const payload = { ...basePayload };
+
+    if (isOwner) {
+      const self = await User.findById(userId).select('email home');
+      payload.email = self.email;
+      payload.home = self.home;
+    } else if (!basePayload.isPrivate) {
+      const publicUser = await User.findById(userId).select('email');
+      payload.email = publicUser.email;
+    } else {
+      const isFollowing = await Follower.exists({ follower: currentUserId, following: userId });
+      if (isFollowing) {
+        const followedUser = await User.findById(userId).select('email');
+        payload.email = followedUser.email;
+      }
     }
 
     res.status(200).json(payload);
   } catch (err) {
-    console.error('Error fetching user:', err);
+    req.log.error({ err }, 'Error fetching user');
     res.status(500).json({ message: 'Server error' });
   }
 });

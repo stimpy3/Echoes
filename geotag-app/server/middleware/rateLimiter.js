@@ -98,4 +98,37 @@ const coPresenceActionLimiter = createRateLimiter({
   prefix: 'rl:copresence:',
 });
 
-module.exports = { loginLimiter, signupLimiter, googleAuthLimiter, coPresenceActionLimiter };
+//Audit finding BE-010: every mutation-heavy route below (memory create/edit/delete,
+//like, comment, follow request/confirm/unfollow, chat mark-read, home location, privacy
+//toggle) previously had no rate limiting at all — verifyToken proves who you are, but
+//nothing capped how often an authenticated caller could hit them. That's a real abuse
+//surface even for a "legitimate" account: a compromised session or a scripted client can
+//still spam comments, mass-follow/unfollow, or hammer memory creation (each of which
+//queues a Cloudinary upload and an embedding job — real downstream cost per call) with
+//no backpressure. Two separate limiters rather than one shared one, because the two
+//groups have genuinely different natural request rates and cost profiles:
+const memoryMutationLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  message: 'Too many memory changes. Please slow down and try again shortly.',
+  prefix: 'rl:memorymutation:',
+});
+
+//Likes/comments/follows are cheap individually but happen far more often in normal use
+//than creating a memory does — a looser ceiling than memoryMutationLimiter, still well
+//below what scripted spam would need.
+const socialActionLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  message: 'Too many actions. Please slow down and try again shortly.',
+  prefix: 'rl:social:',
+});
+
+module.exports = {
+  loginLimiter,
+  signupLimiter,
+  googleAuthLimiter,
+  coPresenceActionLimiter,
+  memoryMutationLimiter,
+  socialActionLimiter,
+};
