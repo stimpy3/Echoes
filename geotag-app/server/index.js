@@ -49,6 +49,7 @@ const userRoutes = require("./routes/userRoutes");
 const followRequestRoutes = require("./routes/followRequestRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const messageRoutes = require("./routes/messageRoutes");
+const coPresenceRoutes = require("./routes/coPresenceRoutes"); // Co-presence rollout, Phase 4
 
 
 
@@ -173,6 +174,7 @@ app.use('/api/users',userRoutes);
 app.use("/api/follow", followRequestRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/copresence", coPresenceRoutes); // Co-presence rollout, Phase 4
 
 
 //app = normal server
@@ -253,6 +255,17 @@ doesn't currently justify. If it ever does, this line moves to its own entry poi
 nothing about the queue or worker's own code has to change.
 */
 require("./workers/embeddingWorker");
+
+/*
+Co-presence rollout, Phase 3, now wired in. Same in-process reasoning as the text-
+embedding worker above — same single-Render-instance trade-off. The one thing worth
+knowing: CLIP (Xenova/clip-vit-base-patch32) is a meaningfully bigger model than MiniLM,
+and loads lazily on this worker's FIRST real job, not at boot — see
+utils/imageEmbeddingHelper.js for why it isn't eagerly preloaded the way MiniLM is.
+That first job (in dev, in CI, or on Render) will pay real model-download time; nothing
+before that point is affected.
+*/
+require("./workers/imageEmbeddingWorker");
 
 server.listen(process.env.PORT || 5000, () => {
   logger.info({ port: process.env.PORT || 5000 }, 'Server running');

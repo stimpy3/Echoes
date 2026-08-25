@@ -7,6 +7,7 @@ const verifyToken = require('../middleware/verifyToken');
 const { cloudinary, upload } = require('../middleware/cloudinaryConfig');
 const { generateEmbeddingWithRetry } = require('../utils/embeddingHelper');
 const { enqueueEmbeddingJob } = require('../queues/embeddingQueue');
+const { enqueueImageEmbeddingJob } = require('../queues/imageEmbeddingQueue');
 
 const buildProjectionStage = {
     $project: {
@@ -205,6 +206,16 @@ router.post('/creatememory', verifyToken, upload.single('photo'), async (req, re
         } catch (err) {
             req.log.error({ err, memoryId: savedMemory._id }, 'Failed to enqueue embedding job');
         }
+
+        // Co-presence rollout, Phase 3, now wired in. Same non-blocking, already-
+        // responded-to-the-user guarantee as the text embedding above — a separate
+        // try/catch so a failure to enqueue this one can't be confused with, or block,
+        // the text-embedding path.
+        try {
+            await enqueueImageEmbeddingJob(savedMemory._id, photoUrl);
+        } catch (err) {
+            req.log.error({ err, memoryId: savedMemory._id }, 'Failed to enqueue image embedding job');
+        }
     } catch (err) {
         req.log.error({ err }, 'Memory creation error');
         res.status(500).json({ message: 'Server failed to create memory' });
@@ -305,6 +316,17 @@ router.patch('/editmemory/:id', verifyToken, upload.single('photo'), async (req,
                 await enqueueEmbeddingJob(memoryId, textToEmbed);
             } catch (err) {
                 req.log.error({ err, memoryId }, 'Failed to enqueue embedding update job');
+            }
+        }
+
+        // Co-presence rollout, Phase 3. Only the PHOTO changing invalidates the image
+        // embedding — unlike text, editing the title/description doesn't touch what's
+        // actually in the picture, so re-embedding then would be pure waste.
+        if (req.file) {
+            try {
+                await enqueueImageEmbeddingJob(memoryId, updatedMemory.photoUrl);
+            } catch (err) {
+                req.log.error({ err, memoryId }, 'Failed to enqueue image embedding update job');
             }
         }
     } catch (err) {

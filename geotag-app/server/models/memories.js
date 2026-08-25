@@ -18,6 +18,16 @@ const memorySchema=new mongoose.Schema({
   },
   photoUrl: { type: String, required: true },
   embedding: { type: [Number], select: false }, // Store embeddings but don't select by default
+  /*
+  Co-presence rollout, Phase 3: the CLIP-style image embedding, same select:false
+  posture as the text `embedding` above for the same reason (a float array on every
+  list response nobody asked for). Populated asynchronously by
+  workers/imageEmbeddingWorker.js after creatememory/editmemory enqueues a job — same
+  non-blocking pattern as the text `embedding` field. Memories created before this was
+  wired in have no value here until something backfills them (no backfill script exists
+  yet — same gap already noted for the text embedding in implementNext.md).
+  */
+  imageEmbedding: { type: [Number], select: false },
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [{
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
