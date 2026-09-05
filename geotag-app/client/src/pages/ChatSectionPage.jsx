@@ -1,25 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Send, User } from "lucide-react";
 import { formatTime } from "../utils/formatTime";
 import { formatDDMMYY } from "../utils/formatDDMMYY";
 import { socket } from "../utils/socket";
 import axios from "axios";
 
-const ChatSectionPage = ({ 
-  refreshChats, 
-  chatId, 
-  receiverId, 
-  receiverName, 
+const ChatSectionPage = ({
+  refreshChats,
+  chatId,
+  receiverId,
+  receiverName,
   receiverProfilePic,
-  myId 
+  myId
 }) => {
   const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
 
   const [messages, setMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false);  // Track if other user is typing
+  const [isTyping, setIsTyping] = useState(false);
   const textareaRef = useRef();
   const messagesContainerRef = useRef(null);
-  const typingTimeoutRef = useRef(null);  // For debouncing
+  const typingTimeoutRef = useRef(null);
   const navigate = useNavigate();
 
   const handleInput = (e) => {
@@ -27,15 +28,9 @@ const ChatSectionPage = ({
     ta.style.height = "40px";
     ta.style.height = Math.min(ta.scrollHeight, 100) + "px";
 
-    // ✅ TYPING INDICATOR: Emit typing event
     socket.emit("typing", { chatId, receiverId });
 
-    // ✅ Clear previous timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // ✅ Stop typing after 2 seconds of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit("stopTyping", { chatId, receiverId });
     }, 2000);
@@ -50,48 +45,22 @@ const ChatSectionPage = ({
     textareaRef.current.value = "";
     textareaRef.current.style.height = "40px";
 
-    // ✅ Stop typing indicator when sending
     socket.emit("stopTyping", { chatId, receiverId });
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     const tempId = Date.now();
-    const optimisticMessage = {
-      _id: tempId,
-      text,
-      isOwn: true,
-      createdAt: new Date(),
-    };
-
+    const optimisticMessage = { _id: tempId, text, isOwn: true, createdAt: new Date() };
     setMessages(prev => [...prev, optimisticMessage]);
 
-    /*
-    Persistence and delivery now happen together, server-side, in the socket handler —
-    see server/socket/index.js. There is no longer a parallel axios.post: that call and
-    this emit used to race, and a failure in the axios call meant the recipient had
-    already been shown (via the emit, which never touched the database) a message that
-    didn't actually exist. One path now, not two.
-
-    socket.timeout(8000) turns the ack into a real request/response: the callback fires
-    either with the server's response, or with `err` set if 8s pass with no response
-    (server down, connection dropped mid-request, etc.) — without a timeout, a lost
-    connection would leave this optimistic bubble stuck forever with no rollback.
-    */
     socket.timeout(8000).emit(
       "sendMessage",
       { message: text, chatId, receiverId },
       (err, response) => {
         if (err || !response?.success) {
-          // Send failed or timed out — the optimistic bubble was never real, remove it.
           setMessages(prev => prev.filter(msg => msg._id !== tempId));
           console.error("Error sending message:", err || response?.error);
           return;
         }
-
-        // Swap the temporary optimistic entry for the real, persisted message — same
-        // position in the list, now carrying the actual _id and createdAt from Mongo
-        // instead of a client-generated placeholder.
         setMessages(prev =>
           prev.map(msg => (msg._id === tempId ? { ...response.message, isOwn: true } : msg))
         );
@@ -107,124 +76,89 @@ const ChatSectionPage = ({
     }
   };
 
-  // Auto-scroll to bottom
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [messages, isTyping]);  // ✅ Also scroll when typing indicator appears
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages, isTyping]);
 
-  // Fetch messages when chat changes
   useEffect(() => {
     setMessages([]);
-    setIsTyping(false);  // ✅ Reset typing on chat change
-    
+    setIsTyping(false);
     if (!chatId) return;
 
     const getMessages = async (chatId) => {
       try {
-        const res = await axios.get(`${BASE_URL}/api/messages/${chatId}`, {
-          withCredentials: true
-        });
+        const res = await axios.get(`${BASE_URL}/api/messages/${chatId}`, { withCredentials: true });
         setMessages(res.data);
       } catch (err) {
         console.error("Error fetching messages:", err);
       }
     };
-
     getMessages(chatId);
   }, [chatId]);
 
-  // Listen for new messages
   useEffect(() => {
     const handleNewMessage = (msg) => {
-      console.log("LIVE MESSAGE RECEIVED:", msg);
-      
       if (msg.chatId === chatId) {
         setMessages(prev => {
-          const exists = prev.some(m => 
-            m._id === msg._id || 
+          const exists = prev.some(m =>
+            m._id === msg._id ||
             (m.text === msg.text && Math.abs(new Date(m.createdAt) - new Date(msg.createdAt)) < 1000)
           );
-          
           if (exists) return prev;
           return [...prev, msg];
         });
       }
     };
-
     socket.on("newMessage", handleNewMessage);
-
-    return () => {
-      socket.off("newMessage", handleNewMessage);
-    };
+    return () => socket.off("newMessage", handleNewMessage);
   }, [chatId]);
 
-  // ✅ LISTEN FOR TYPING INDICATOR
   useEffect(() => {
     const handleUserTyping = ({ chatId: typingChatId, userId: typingUserId, isTyping: typing }) => {
-      // Only show typing if it's for THIS chat and from the OTHER user
-      if (typingChatId === chatId && typingUserId === receiverId) {
-        setIsTyping(typing);
-        console.log(`${receiverName} is ${typing ? 'typing' : 'not typing'}`);
-      }
+      if (typingChatId === chatId && typingUserId === receiverId) setIsTyping(typing);
     };
-
     socket.on("userTyping", handleUserTyping);
-
-    return () => {
-      socket.off("userTyping", handleUserTyping);
-    };
+    return () => socket.off("userTyping", handleUserTyping);
   }, [chatId, receiverId, receiverName]);
 
-  // ✅ Cleanup typing timeout on unmount
   useEffect(() => {
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
   }, []);
 
   const isDifferentDay = (msg1, msg2) => {
     if (!msg1 || !msg2) return true;
-
     const d1 = new Date(msg1.createdAt);
     const d2 = new Date(msg2.createdAt);
-
-    return (
-      d1.getFullYear() !== d2.getFullYear() ||
-      d1.getMonth() !== d2.getMonth() ||
-      d1.getDate() !== d2.getDate()
-    );
+    return d1.getFullYear() !== d2.getFullYear() || d1.getMonth() !== d2.getMonth() || d1.getDate() !== d2.getDate();
   };
 
+  const Avatar = ({ size = 30 }) =>
+    receiverProfilePic ? (
+      <img src={receiverProfilePic} alt="" style={{ width: size, height: size }} className="rounded-full object-cover shrink-0" />
+    ) : (
+      <div style={{ width: size, height: size }} className="rounded-full bg-lightMain2 dark:bg-[#393939] flex items-center justify-center shrink-0">
+        <User size={size * 0.5} className="text-gray-400" />
+      </div>
+    );
+
   return (
-    <div className="relative flex flex-col w-full h-screen overflow-hidden bg-lightMain dark:bg-dfadeColor">
-      <section className="w-full bg-main dark:bg-dmain h-[50px] p-[10px] flex items-center">
-        <button className="h-fit w-fit flex" onClick={() => goToProfile(receiverId)}>
-          <div className="h-fit w-fit mr-[10px]">
-            {receiverProfilePic ? (
-              <img
-                src={receiverProfilePic}
-                alt="pfp"
-                className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"
-              />
-            ) : (
-              <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
-                <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
-              </div>
-            )}
+    <div className="relative flex flex-col flex-1 h-screen overflow-hidden bg-main dark:bg-dmain">
+      <section className="h-[64px] shrink-0 flex items-center px-5 gap-3 border-b border-hairline dark:border-dhairline">
+        <button className="flex items-center gap-3" onClick={() => goToProfile(receiverId)}>
+          <Avatar size={34} />
+          <div className="flex flex-col items-start">
+            <p className="text-[15px] font-semibold text-txt dark:text-dtxt">{receiverName}</p>
+            {isTyping && <p className="text-[11.5px]" style={{ color: '#3ed8e3' }}>typing…</p>}
           </div>
-          <p className="text-[1rem]">{receiverName}</p>
         </button>
       </section>
 
-      {/* Messages */}
       <div
         ref={messagesContainerRef}
-        className="flex flex-col w-full p-[20px] mb-[100px] overflow-y-auto custom-scrollbar"
+        className="flex-1 flex flex-col w-full px-7 py-6 gap-[10px] overflow-y-auto custom-scrollbar"
       >
         {messages.map((msg, idx) => {
           const prevMsg = messages[idx - 1];
@@ -232,58 +166,25 @@ const ChatSectionPage = ({
           const diffDay = !prevMsg || isDifferentDay(prevMsg, msg);
 
           return (
-            <div key={msg._id} className="w-full h-fit flex flex-col">
+            <div key={msg._id} className="w-full flex flex-col">
               {diffDay && (
-                <p className="w-full text-center h-fit text-txt2 dark:text-txt2 text-[0.7rem] mt-[20px] mb-[10px]">
+                <p className="w-full text-center text-[11px] font-semibold uppercase tracking-[.12em] text-txt2 dark:text-[#6b6b6b] mt-3 mb-2">
                   {formatDDMMYY(msg.createdAt)}
                 </p>
               )}
 
-              <div
-                className={`w-full h-fit flex items-center gap-2 ${
-                  msg.isOwn ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`w-[30px] h-[30px] rounded-full ${
-                    isDifferentSender ? "mt-6" : "mt-1"
-                  }`}
-                >
-                  {(isDifferentSender || idx === 0) && !msg.isOwn ? (
-                    receiverProfilePic ? (
-                      <img
-                        src={receiverProfilePic}
-                        alt="pfp"
-                        className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
-                        <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
-                      </div>
-                    )
-                  ) : null}
-                </div>
+              <div className={`w-full flex items-end gap-2 ${msg.isOwn ? "justify-end" : "justify-start"} ${isDifferentSender ? "mt-3" : "mt-0.5"}`}>
+                {!msg.isOwn && (isDifferentSender || idx === 0) && <Avatar size={30} />}
+                {!msg.isOwn && !(isDifferentSender || idx === 0) && <div className="w-[30px] shrink-0" />}
 
                 <div
-                  className={`
-                    max-w-[300px] flex flex-col w-fit h-fit p-2 rounded-lg whitespace-pre-wrap break-words
-                    ${
-                      msg.isOwn
-                        ? "bg-gradient-mainBright text-dtxtLight font-medium"
-                        : "bg-main dark:bg-dmain self-start text-txt dark:text-dtxt"
-                    }
-                    ${isDifferentSender ? "mt-6" : "mt-1"}
-                  `}
+                  className={`max-w-[300px] flex flex-col w-fit px-[14px] py-[10px] whitespace-pre-wrap break-words text-sm leading-[1.5]
+                    ${msg.isOwn
+                      ? "bg-gradient-mainBright text-white font-medium rounded-[14px_14px_4px_14px]"
+                      : "bg-lightMain dark:bg-[#1f1f1f] text-txt dark:text-[#eee] rounded-[14px_14px_14px_4px]"}`}
                 >
                   {msg.text}
-
-                  <p
-                    className={`text-[0.7rem] text-right ${
-                      msg.isOwn
-                        ? "text-dborderColor font-semibold"
-                        : "text-dtxt2 dark:text-txt2 font-medium"
-                    }`}
-                  >
+                  <p className={`text-[10.5px] text-right mt-1 ${msg.isOwn ? "font-semibold" : "text-txt2 dark:text-[#8a8a8a]"}`} style={msg.isOwn ? { color: 'rgba(255,255,255,.75)' } : undefined}>
                     {formatTime(msg.createdAt)}
                   </p>
                 </div>
@@ -292,48 +193,35 @@ const ChatSectionPage = ({
           );
         })}
 
-        {/* ✅ TYPING INDICATOR */}
         {isTyping && (
-          <div className="w-full h-fit flex items-center gap-2 justify-start mt-2">
-            <div className="w-[30px] h-[30px] rounded-full">
-              {receiverProfilePic ? (
-                <img
-                  src={receiverProfilePic}
-                  alt="pfp"
-                  className="w-[30px] border-borderColor h-[30px] rounded-full object-cover"
-                />
-              ) : (
-                <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dmain rounded-full flex justify-center items-end overflow-hidden">
-                  <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
-                </div>
-              )}
-            </div>
-            <div className="bg-main dark:bg-dmain px-4 py-2 rounded-lg flex items-center gap-1">
-              <span className="w-2 h-2 bg-txt2 dark:bg-dtxt2 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-              <span className="w-2 h-2 bg-txt2 dark:bg-dtxt2 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-              <span className="w-2 h-2 bg-txt2 dark:bg-dtxt2 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+          <div className="w-full flex items-center gap-2 justify-start mt-2">
+            <Avatar size={30} />
+            <div className="bg-lightMain dark:bg-[#1f1f1f] px-4 py-2 rounded-[14px_14px_14px_4px] flex items-center gap-1">
+              <span className="w-[7px] h-[7px] rounded-full bg-txt2 dark:bg-[#8a8a8a] animate-bounce" style={{ animationDelay: '0ms' }}></span>
+              <span className="w-[7px] h-[7px] rounded-full bg-txt2 dark:bg-[#6b6b6b] animate-bounce" style={{ animationDelay: '150ms' }}></span>
+              <span className="w-[7px] h-[7px] rounded-full bg-txt2 dark:bg-[#4d4d4d] animate-bounce" style={{ animationDelay: '300ms' }}></span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Input Area */}
-      <div className="absolute z-[5] bottom-[20px] p-[20px] w-full max-h-[100px] flex justify-center items-center">
+      {/* Composer */}
+      <div className="h-20 shrink-0 flex items-center gap-3 px-6 border-t border-hairline dark:border-dhairline">
         <textarea
           ref={textareaRef}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          className="w-full min-h-[35px] cursor-text h-[40px] max-h-[100px] p-[5px] px-[10px] bg-main dark:bg-dmain rounded-xl border border-borderColor dark:border-dborderColor
-                     overflow-y-auto scrollbar-hide focus:outline-none whitespace-pre-wrap break-words
-                     pr-[50px] text-txt dark:text-dtxt"
+          rows={1}
+          className="flex-1 min-h-[40px] h-[40px] max-h-[100px] px-4 py-[9px] rounded-full bg-slightLightMain dark:bg-[#1c1c1c] text-txt dark:text-dtxt
+                     border-none overflow-y-auto scrollbar-hide focus:outline-none focus-visible:ring-2 focus-visible:ring-accentMain whitespace-pre-wrap break-words text-sm"
           placeholder="Type a message..."
         />
         <button
           onClick={sendMessage}
-          id="sendBtn"
-          className="absolute right-[30px] font-bold text-transparent bg-clip-text bg-gradient-main rounded-lg"
+          aria-label="Send"
+          className="w-11 h-11 rounded-full bg-gradient-mainBright flex items-center justify-center shrink-0 focus-visible:ring-2 focus-visible:ring-accentMain"
         >
-          Send
+          <Send size={18} className="text-white" />
         </button>
       </div>
     </div>

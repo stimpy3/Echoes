@@ -23,11 +23,12 @@ const FriendMarker = ({ pfp,id,memory }) => {
     className: "", // removes default leaflet marker styles
     html: `
      <div class="w-[52px] h-[58px] relative hover:scale-[1.15] transition-transform duration-200 origin-bottom">
-       <div class="relative z-20 w-12 h-12 rounded-[10px] border-[2px] bg-gray-500 bg-cover bg-center shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
+       <div class="absolute left-1/2 -translate-x-1/2 bg-black/40 pointer-events-none" style="bottom:-6px; width:26px; height:9px; border-radius:50%;"></div>
+       <div class="relative z-20 w-12 h-12 rounded-[10px] border-[2px] bg-gray-500 bg-cover bg-center"
       style="background-image: url('${memory.photoUrl}');
              border-color: ${accent};">
       </div>
-      <div class="z-30 absolute w-7 right-0 bottom-[6px] aspect-square rounded-full bg-cover bg-center shadow-md"
+      <div class="z-30 absolute w-7 right-0 bottom-[6px] aspect-square rounded-full bg-cover bg-center"
       style="background-image: url('${pfp}'); border: 2px solid ${accent};"></div>
     </div>
     `,

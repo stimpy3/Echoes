@@ -214,3 +214,42 @@ input,textarea{
     @apply bg-background text-foreground;
   }
 }
+
+/* Fakes a dark basemap by inverting the OSM tile layer, then inverting markers/popups
+   back to normal so photos and pins don't render as photo negatives. Used because CARTO's
+   free dark_all tiles now require an account. */
+.map-dark-filter .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+.map-dark-filter .leaflet-marker-pane,
+.map-dark-filter .leaflet-popup-pane {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* MapLibre's own popup chrome (background, arrow, close button) comes from
+   maplibre-gl.css and is white/light regardless of theme — override it here so the
+   card follows the app's light/dark mode instead of staying stuck white. The content
+   itself is theme-aware via Tailwind dark: classes (see popupHtml in MapView.jsx),
+   since that HTML renders into the real document and still sees the .dark class. */
+.echoes-popup .maplibregl-popup-content {
+  background: theme('colors.main');
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.25);
+  padding: 10px;
+}
+.dark .echoes-popup .maplibregl-popup-content {
+  background: theme('colors.dmain');
+}
+.echoes-popup .maplibregl-popup-tip {
+  border-top-color: theme('colors.main');
+}
+.dark .echoes-popup .maplibregl-popup-tip {
+  border-top-color: theme('colors.dmain');
+}
+.echoes-popup .maplibregl-popup-close-button {
+  color: theme('colors.txt2');
+  font-size: 18px;
+}
+.dark .echoes-popup .maplibregl-popup-close-button {
+  color: theme('colors.dtxt2');
+}

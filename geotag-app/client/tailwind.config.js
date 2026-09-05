@@ -18,6 +18,8 @@ export default {
         dslightLightMain: '#131313ff',
         borderColor: '#b5b5b5ff',
         dborderColor: '#414141ff',
+        hairline: '#e6e4e0',
+        dhairline: '#2b2b2b',
         fadeColor: '#dededeff',
         dfadeColor: '#171717ff',
         txt: 'black',
@@ -105,7 +107,11 @@ export default {
       },
 	   boxShadow: {
         'custom-lg': '0 10px 25px rgba(0, 0, 0, 0.15)', // lighter or darker shadow
-        'custom-dark-lg': '5px 5px 5px rgba(145, 145, 145, 0.19)', // for dark mode
+        'pin-dark': '0 4px 12px rgba(0,0,0,.5)',
+        'polaroid-dark': '0 6px 18px rgba(0,0,0,.45)',
+        'float-cluster': '0 12px 32px rgba(0,0,0,.5)',
+        'add-panel': '-20px 0 48px rgba(0,0,0,.5)',
+        'phone-light': '0 8px 24px rgba(0,0,0,.12)',
       }
     }
   },

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Sparkles, ImagePlus, X as XIcon } from 'lucide-react';
+import { ImagePlus, X as XIcon } from 'lucide-react';
+
+// How long the pin has to sit still before the address auto-fills.
+const ADDRESS_AUTOFILL_DELAY = 2000;
 
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/jpg"];
@@ -10,6 +13,12 @@ const formatBytes = (bytes) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+const fieldClass =
+  "w-full px-[14px] py-[10px] rounded-lg border border-lightMain2 dark:border-[#2b2b2b] bg-slightLightMain dark:bg-[#161616] text-txt dark:text-white text-sm " +
+  "placeholder:text-txt2 dark:placeholder:text-[#5a5a5a] focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60";
+
+const labelClass = "block text-[11px] font-semibold uppercase tracking-[.12em] text-txt2 dark:text-[#8a8a8a] mb-2";
 
 const AddMemoryForm = ({ onClose, onAdd, position }) => {
   const [formData, setFormData] = useState({
@@ -26,6 +35,7 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
   const [photoError, setPhotoError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCoords, setEditingCoords] = useState(false);
   const fileInputRef = useRef(null);
 
   /*
@@ -49,6 +59,22 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
       }));
     }
   }, [position]);
+
+  // Reverse-geocode automatically once the pin has sat still for a couple of seconds,
+  // rather than making the user press a button — every drag/re-click resets the timer, so
+  // it only fires once the pin actually settles.
+  const addressTimerRef = useRef(null);
+  useEffect(() => {
+    if (!position?.lat || !position?.lng) return;
+
+    if (addressTimerRef.current) clearTimeout(addressTimerRef.current);
+    addressTimerRef.current = setTimeout(() => {
+      fetchAddress();
+    }, ADDRESS_AUTOFILL_DELAY);
+
+    return () => clearTimeout(addressTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position?.lat, position?.lng]);
 
   // Handle input changes
   const handleChange = (e) => {
@@ -234,210 +260,211 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
   };
 
   return (
-    <div className="fixed z-[999] inset-0 backdrop-blur-[10px] bg-dborderColor/50 flex items-center justify-center p-4">
-      {/* rounded-xl + overflow-hidden on the OUTER box so the rounded corners clip the
-          scrolling content; the inner div owns the scroll. Previously both overflow-y-auto
-          and overflow-hidden sat on the same element — the y-axis still scrolled (the
-          later rule wins) but it's ambiguous, and the scrollbar rendered against a square
-          corner. Splitting the two responsibilities makes it explicit. */}
-      <div className="rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 bg-main dark:bg-dlightMain overflow-y-auto custom-scrollbar">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-txt dark:text-dtxt">
-              Add New Memory
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-dlightTxt hover:text-txt dark:hover:text-dtxt text-[2rem]"
-            >
-              ×
-            </button>
-          </div>
+    <div
+      className="fixed z-[1400] top-0 right-0 h-full w-[420px] max-w-full flex flex-col bg-main dark:bg-[#0e0e0e] border-l border-hairline dark:border-dhairline"
+      style={{ boxShadow: '-20px 0 48px rgba(0,0,0,.5)' }}
+    >
+      <div className="h-[3px] w-full bg-gradient-main shrink-0" />
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-lightTxt dark:text-dlightTxt mb-1">
-                Title
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                required
-                placeholder="Beach Sunset"
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
-              />
-            </div>
+      <div className="h-[64px] shrink-0 flex items-center px-6">
+        <h2 className="text-[17px] font-semibold text-txt dark:text-white">New memory</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="ml-auto text-txt2 dark:text-[#8a8a8a] hover:text-txt dark:hover:text-white"
+        >
+          <XIcon size={20} />
+        </button>
+      </div>
 
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-lightTxt dark:text-dlightTxt mb-1">
-                Your memory
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                required
-                rows="4"
-                placeholder="Start with what you saw, then what you did, and finally how it made you feel...."
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
-              />
-            </div>
+      <form id="add-memory-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar px-6 py-2 flex flex-col gap-[18px]">
+        <div>
+          <label className={labelClass}>Title</label>
+          <input
+            type="text"
+            name="title"
+            value={formData.title}
+            onChange={handleChange}
+            required
+            placeholder="Beach Sunset"
+            className={fieldClass}
+          />
+        </div>
 
-            {/* Photo Selection — dropzone.
-                The native <input type="file"> is kept in the DOM (it's still what actually
-                holds the file and opens the picker) but visually hidden via sr-only rather
-                than `hidden`/`display:none`, because a display:none input can't receive
-                focus — which breaks keyboard access and browser validation messages.
-                The <label> is the visible target: clicking or pressing Enter/Space on it
-                activates the input natively, no JS click-forwarding needed. */}
-            <div>
-              <label
-                htmlFor="photo-upload"
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                className={`relative flex flex-col items-center justify-center w-full rounded-xl
-                            border-2 border-dashed cursor-pointer transition-colors
-                            ${photoPreview ? "p-3" : "px-4 py-8"}
-                            ${isDragging
-                              ? "border-dpinkMain bg-dpinkMain/10"
-                              : "border-borderColor dark:border-dborderColor hover:border-dpinkMain/60"}`}
-              >
-                {photoPreview ? (
-                  <div className="w-full flex items-center gap-3">
-                    <img
-                      src={photoPreview}
-                      alt=""
-                      className="w-20 h-20 rounded-lg object-cover shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-txt dark:text-dtxt truncate">
-                        {formData.photo?.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {formData.photo && formatBytes(formData.photo.size)} · Click to replace
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      // stopPropagation: this button sits inside the <label>, so without it
-                      // the click would also activate the file input and reopen the picker.
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); clearPhoto(); }}
-                      aria-label="Remove photo"
-                      className="shrink-0 p-2 rounded-full text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition"
-                    >
-                      <XIcon size={18} />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <ImagePlus className="text-gray-400 mb-2" size={28} />
-                    <p className="text-sm font-medium text-txt dark:text-dtxt">
-                      Drop a photo here, or <span className="text-transparent bg-clip-text bg-gradient-main font-semibold">browse</span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      PNG or JPEG, up to {formatBytes(MAX_PHOTO_BYTES)}
-                    </p>
-                  </>
-                )}
+        <div>
+          <label className={labelClass}>Your memory</label>
+          <textarea
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            required
+            style={{ height: 78, lineHeight: 1.55 }}
+            placeholder="Start with what you saw, then what you did, and finally how it made you feel...."
+            className={fieldClass}
+          />
+        </div>
 
-                <input
-                  id="photo-upload"
-                  ref={fileInputRef}
-                  type="file"
-                  name="photo"
-                  accept="image/png, image/jpeg, image/jpg"
-                  onChange={handleFileChange}
-                  className="sr-only"
+        {/* Photo Selection — dropzone.
+            The native <input type="file"> is kept in the DOM (it's still what actually
+            holds the file and opens the picker) but visually hidden via sr-only rather
+            than `hidden`/`display:none`, because a display:none input can't receive
+            focus — which breaks keyboard access and browser validation messages.
+            The <label> is the visible target: clicking or pressing Enter/Space on it
+            activates the input natively, no JS click-forwarding needed. */}
+        <div>
+          <label className={labelClass}>Photo</label>
+          <label
+            htmlFor="photo-upload"
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={`relative flex flex-col items-center justify-center w-full cursor-pointer transition-colors
+                        ${photoPreview
+                          ? "p-3 rounded-[10px] border border-lightMain2 dark:border-[#2b2b2b] bg-slightLightMain dark:bg-[#161616]"
+                          : "px-4 py-8 rounded-xl border-2 border-dashed"}
+                        ${!photoPreview && (isDragging
+                          ? "border-dpinkMain bg-dpinkMain/10"
+                          : "border-lightMain2 dark:border-[#2b2b2b] hover:border-dpinkMain/60")}`}
+          >
+            {photoPreview ? (
+              <div className="w-full flex items-center gap-3">
+                <img
+                  src={photoPreview}
+                  alt=""
+                  className="w-16 h-16 rounded-lg object-cover shrink-0"
                 />
-              </label>
-
-              {photoError && (
-                <p role="alert" className="text-xs text-red-500 mt-2">
-                  {photoError}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-txt dark:text-white truncate">
+                    {formData.photo?.name}
+                  </p>
+                  <p className="text-[11.5px] text-txt2 dark:text-[#8a8a8a]">
+                    {formData.photo && formatBytes(formData.photo.size)} · Click to replace
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  // stopPropagation: this button sits inside the <label>, so without it
+                  // the click would also activate the file input and reopen the picker.
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); clearPhoto(); }}
+                  aria-label="Remove photo"
+                  className="shrink-0 p-2 rounded-full text-txt2 dark:text-[#8a8a8a] hover:text-red-500 hover:bg-red-500/10 transition"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <ImagePlus className="text-txt2 dark:text-[#5a5a5a] mb-2" size={28} />
+                <p className="text-[13.5px] font-medium text-txt dark:text-white">
+                  Drop a photo here, or <span className="text-transparent bg-clip-text bg-gradient-main font-bold">browse</span>
                 </p>
-              )}
-            </div>
+                <p className="text-[11.5px] text-txt2 dark:text-[#8a8a8a] mt-1">
+                  PNG or JPEG, up to {formatBytes(MAX_PHOTO_BYTES)}
+                </p>
+              </>
+            )}
 
-            {/* Address + Auto Address Button */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="Santa Monica Beach, CA"
-                className="dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-dpinkMain/60"
-              />
-              <button
-                type="button"
-                onClick={fetchAddress}
-                className="px-3 py-2 min-w-fit whitespace-nowrap flex text-dtxt text-[1rem] font-bold bg-gradient-main rounded-lg hover:bg-gray-300 text-sm"
-              >
-                <Sparkles />&nbsp;<p className="flex items-center text-[1.1rem] font-normal ">Auto</p>
-              </button>
-            </div>
+            <input
+              id="photo-upload"
+              ref={fileInputRef}
+              type="file"
+              name="photo"
+              accept="image/png, image/jpeg, image/jpg"
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
 
-            {/* Info about auto-filled Lat/Lng */}
-            <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-              Latitude & Longitude are auto-filled based on your map click, but
-              you can edit them if needed.
-            </div>
+          {photoError && (
+            <p role="alert" className="text-[11.5px] text-[#f87171] mt-2">
+              {photoError}
+            </p>
+          )}
+        </div>
 
-            {/* Latitude & Longitude (editable) */}
+        <div>
+          <div className="flex items-center mb-2">
+            <label className={`${labelClass} !mb-0`}>Place</label>
+            {addrLoading && (
+              <span className="ml-auto text-[10.5px] font-medium normal-case tracking-normal text-accentMain flex items-center gap-1">
+                <span className="w-[5px] h-[5px] rounded-full bg-accentMain animate-pulse" />
+                Locating…
+              </span>
+            )}
+          </div>
+          <input
+            type="text"
+            name="address"
+            value={formData.address}
+            onChange={handleChange}
+            placeholder="Santa Monica Beach, CA"
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Coordinates</label>
+          {editingCoords ? (
             <div className="flex gap-2">
               <input
                 type="number"
                 step="any"
                 name="latitude"
                 value={formData.latitude}
-                onChange={(e) =>
-                  setFormData({ ...formData, latitude: e.target.value })
-                }
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
+                onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                className={`${fieldClass} text-[12.5px]`}
               />
               <input
                 type="number"
                 step="any"
                 name="longitude"
                 value={formData.longitude}
-                onChange={(e) =>
-                  setFormData({ ...formData, longitude: e.target.value })
-                }
-                className=" dark:bg-dlightMain w-full px-4 py-2 border-[1px] border-borderColor dark:border-dborderColor rounded-lg text-sm"
+                onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                className={`${fieldClass} text-[12.5px]`}
               />
             </div>
-
-            {submitError && (
-              <p role="alert" className="text-sm text-red-500">
-                {submitError}
-              </p>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-4">
+          ) : (
+            <div className="flex items-center px-3 py-[9px] rounded-lg bg-slightLightMain dark:bg-[#161616]">
+              <span className="text-[10.5px] font-semibold uppercase tracking-[.1em] text-txt2 dark:text-[#5a5a5a] mr-3">Lat / Lng</span>
+              <span className="text-[12.5px] text-lightTxt dark:text-[#d0d0d0]" style={{ fontFamily: 'ui-monospace, monospace' }}>
+                {formData.latitude || '—'}, {formData.longitude || '—'}
+              </span>
               <button
                 type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="flex-1 bg-dmain text-dtxt py-3 rounded-lg font-medium hover:bg-main hover:text-txt transition disabled:opacity-50"
+                onClick={() => setEditingCoords(true)}
+                className="ml-auto text-[11.5px] font-semibold text-accentMain"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 bg-gradient-to-r from-dorangeMain via-dpinkMain to-dcyanMain text-white py-3 rounded-lg font-medium transition disabled:opacity-50"
-              >
-                {isSubmitting ? "Saving..." : "Add Memory"}
+                Edit
               </button>
             </div>
-          </form>
+          )}
         </div>
+
+        {submitError && (
+          <p role="alert" className="text-sm text-[#f87171]">
+            {submitError}
+          </p>
+        )}
+      </form>
+
+      <div className="shrink-0 px-6 py-5 border-t border-hairline dark:border-dhairline flex gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isSubmitting}
+          className="flex-1 h-[46px] rounded-[10px] border border-lightMain2 dark:border-[#2b2b2b] text-txt dark:text-white font-medium hover:bg-lightMain dark:hover:bg-white/5 transition disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="add-memory-form"
+          disabled={isSubmitting}
+          className="flex-1 h-[46px] rounded-[10px] bg-gradient-mainBright text-white text-sm font-semibold transition disabled:opacity-50"
+        >
+          {isSubmitting ? "Saving..." : "Add memory"}
+        </button>
       </div>
     </div>
   );

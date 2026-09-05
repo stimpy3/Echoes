@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { MapContainer, TileLayer, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import CustomMarker from "./CustomMarker";
 
@@ -9,11 +10,9 @@ import CustomMarker from "./CustomMarker";
 const TimelineMapView = ({ memories, onPinClick }) => {
   const { dark } = useTheme();
 
-  const tileUrls = {
-    light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  };
-  const mapStyle = dark ? "dark" : "light";
+  // See MapView.jsx — CARTO's free basemap CDN now requires an account, so this uses OSM
+  // tiles with a CSS invert filter for dark mode instead.
+  const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   // Sort memories by date ascending
   const sortedMemories = useMemo(() => {
@@ -81,6 +80,13 @@ const TimelineMapView = ({ memories, onPinClick }) => {
   const activeMemories = useMemo(() => {
     if (sortedMemories.length === 0) return [];
     return sortedMemories.filter(m => new Date(m.createdAt).getTime() <= currentCutoffDate.getTime());
+  }, [sortedMemories, currentCutoffDate]);
+
+  // Un-revealed pins render dimmed rather than not at all, so you can see where the
+  // timeline is going instead of the map looking arbitrarily sparse.
+  const upcomingMemories = useMemo(() => {
+    if (sortedMemories.length === 0) return [];
+    return sortedMemories.filter(m => new Date(m.createdAt).getTime() > currentCutoffDate.getTime());
   }, [sortedMemories, currentCutoffDate]);
 
   const [renderedMemories, setRenderedMemories] = useState([]);
@@ -206,7 +212,7 @@ const TimelineMapView = ({ memories, onPinClick }) => {
   }, []);
 
   return (
-    <div className="relative w-full h-full min-h-[500px] flex-1">
+    <div className={`relative w-full h-full min-h-[500px] flex-1 ${dark ? "map-dark-filter" : ""}`}>
       <MapContainer
         center={[19.0866, 72.9095]}
         zoom={2}
@@ -215,9 +221,8 @@ const TimelineMapView = ({ memories, onPinClick }) => {
         style={{ height: '100%', minHeight: "calc(100vh - 80px)" }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          url={tileUrls[mapStyle]}
-          subdomains={["a", "b", "c", "d"]}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url={tileUrl}
         />
         {/* Memory pins */}
         {renderedMemories.map(({ memory, isExiting, shouldAnimateIn }) => {
@@ -232,76 +237,107 @@ const TimelineMapView = ({ memories, onPinClick }) => {
           );
         })}
 
+        {upcomingMemories.map((memory) => (
+          <CustomMarker
+            key={`upcoming-${memory._id}`}
+            memory={memory}
+            dimmed
+            shouldAnimateIn={false}
+          />
+        ))}
+
         <ZoomControl position="topleft" />
       </MapContainer>
 
-      {/* Date Display Overlay (Top Left) */}
-      <div className="absolute top-2 left-8 z-[400] px-6 py-3 rounded-2xl transition-all duration-300 pointer-events-none">
-        <h2 className="text-3xl md:text-4xl font-bold text-txt dark:text-dtxt tracking-tighter archivo leading-none">
-          {currentYear}
-        </h2>
-        <h3 className="text-sm md:text-base font-medium text-lightTxt dark:text-dlightTxt uppercase tracking-[0.2em] mt-1">
-          {currentMonth}
-        </h3>
-      </div>
-
-      {/* Timeline Controls Overlay (Bottom Center) - Only show if posts exist */}
+      {/* Scrubber */}
       {sortedMemories.length > 0 && (
-        <div className="absolute bottom-[70px] left-1/2 -translate-x-1/2 z-[400] overflow-hidden w-[95%] max-w-4xl bg-lightMain/50 dark:bg-dlightMain/50 backdrop-blur-sm rounded-[10px] border border-borderColor/50 dark:border-dborderColor/50 flex flex-col items-center">
+        <div
+          className="absolute z-[400] left-1/2 -translate-x-1/2 flex flex-col rounded-[14px] overflow-hidden"
+          style={{ bottom: 28, width: 860, maxWidth: '95%', background: 'rgba(14,14,14,.9)', backdropFilter: 'blur(10px)', border: '1px solid #2b2b2b' }}
+        >
+          {/* Readout row */}
+          <div className="flex items-center gap-3" style={{ padding: '16px 20px 14px', borderBottom: '1px solid #1f1f1f' }}>
+            <span className="font-black leading-none text-white" style={{ fontFamily: '"Archivo Black", sans-serif', fontSize: 30 }}>
+              {currentYear}
+            </span>
+            <span className="text-[13px] font-semibold uppercase text-white" style={{ letterSpacing: '.2em' }}>
+              {currentMonth}
+            </span>
+            <span className="text-[12.5px] text-[#a0a0a0] ml-1">
+              Showing {activeMemories.length} of {sortedMemories.length} memories up to this month
+            </span>
 
-
-          <div className="w-full px-3 sm:px-6">
-            <div className="relative w-full pt-2">
-              <div className="pointer-events-none absolute inset-y-1 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center">
-                <div className="h-[42px] w-[2px] rounded-full bg-orangeMain shadow-[0_0_12px_rgba(251,146,60,0.45)]"></div>
-                <div className="mt-1 h-2 w-2 rounded-full bg-orangeMain"></div>
-              </div>
-
-              <div
-                ref={rulerViewportRef}
-                onScroll={handleRulerScroll}
-                onMouseDown={handleRulerMouseDown}
-                onMouseMove={handleRulerMouseMove}
-                onMouseUp={handleRulerMouseUp}
-                onMouseLeave={handleRulerMouseUp}
-                className="w-full overflow-x-auto scrollbar-hide snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none"
-                style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => scrollToTick(currentTick - 1)}
+                aria-label="Previous month"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/10"
+                style={{ border: '1px solid #2b2b2b' }}
               >
-                <div
-                  className="relative flex items-start h-[60px]"
-                  style={{
-                    width: `${(maxMonthTicks + 1) * tickWidth}px`,
-                    paddingLeft: "calc(50% - 12px)",
-                    paddingRight: "calc(50% - 12px)",
-                    boxSizing: "content-box",
-                  }}
-                >
-                  {Array.from({ length: maxMonthTicks + 1 }).map((_, i) => {
-                    const isYear = (startMonth + i) % 12 === 0;
-                    const yearLabel = startYear + Math.floor((startMonth + i) / 12);
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={() => scrollToTick(currentTick + 1)}
+                aria-label="Next month"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/10"
+                style={{ border: '1px solid #2b2b2b' }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
 
-                    return (
+          {/* Ruler */}
+          <div className="relative" style={{ height: 76, padding: '0 20px' }}>
+            <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 z-20 flex flex-col items-center" style={{ top: 8 }}>
+              <div className="w-[2px] h-[42px] rounded-full" style={{ background: '#FEAC5E', boxShadow: '0 0 12px rgba(251,146,60,.45)' }}></div>
+              <div className="mt-1 w-2 h-2 rounded-full" style={{ background: '#FEAC5E' }}></div>
+            </div>
+
+            <div
+              ref={rulerViewportRef}
+              onScroll={handleRulerScroll}
+              onMouseDown={handleRulerMouseDown}
+              onMouseMove={handleRulerMouseMove}
+              onMouseUp={handleRulerMouseUp}
+              onMouseLeave={handleRulerMouseUp}
+              className="w-full h-full overflow-x-auto scrollbar-hide snap-x snap-mandatory cursor-grab active:cursor-grabbing select-none"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
+            >
+              <div
+                className="relative flex items-start h-full pt-3"
+                style={{
+                  width: `${(maxMonthTicks + 1) * tickWidth}px`,
+                  paddingLeft: "calc(50% - 12px)",
+                  paddingRight: "calc(50% - 12px)",
+                  boxSizing: "content-box",
+                }}
+              >
+                {Array.from({ length: maxMonthTicks + 1 }).map((_, i) => {
+                  const isYear = (startMonth + i) % 12 === 0;
+                  const yearLabel = startYear + Math.floor((startMonth + i) / 12);
+
+                  return (
+                    <div
+                      key={i}
+                      className="relative shrink-0 snap-center flex flex-col items-center justify-start"
+                      style={{ width: `${tickWidth}px` }}
+                    >
                       <div
-                        key={i}
-                        className="relative shrink-0 snap-center flex flex-col items-center justify-start"
-                        style={{ width: `${tickWidth}px` }}
-                      >
-                        <div
-                          className={`${isYear
-                            ? "w-[3px] h-[22px] bg-txt dark:bg-dtxt"
-                            : "w-[1.5px] h-[12px] bg-txt2/60 dark:bg-dtxt2/60"
-                            } rounded-full`}
-                        ></div>
+                        className="rounded-full"
+                        style={isYear
+                          ? { width: 3, height: 22, background: '#fff' }
+                          : { width: 1.5, height: 12, background: '#fff', opacity: 0.6 }}
+                      ></div>
 
-                        {isYear && (
-                          <span className="mt-2 text-[10px] font-bold text-txt dark:text-dtxt leading-none whitespace-nowrap">
-                            {yearLabel}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      {isYear && (
+                        <span className="mt-2 text-[10px] font-bold text-white leading-none whitespace-nowrap">
+                          {yearLabel}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

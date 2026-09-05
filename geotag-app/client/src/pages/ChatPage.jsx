@@ -1,8 +1,9 @@
-import { ChevronLeft, Search, MessageSquareDot } from "lucide-react";
+import { Search } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { formatTime } from "../utils/formatTime";
 import { socket } from "../utils/socket";
+import Rail from "../components/Layout/Rail";
 import ChatSectionPage from "./ChatSectionPage";
 import BareBonesChatPage from "./BarebonesPages/BareBonesChatPage";
 import msgPlane from "../data/animationData/msgPlane.json";
@@ -19,47 +20,36 @@ const ChatPage = () => {
   const [chatList, setChatList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
   const [finalList, setFinalList] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [lastMessage, setLastMessage] = useState("");
+  const [search, setSearch] = useState("");
   const [chatId, setChatId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const navigate = useNavigate();
   const location = useLocation();
 
-  // fetch current user ID
   useEffect(() => {
     const fetchMe = async () => {
       try {
-        const res = await axios.get(`${BASE_URL}/api/user/navbar`, {
-          withCredentials: true,
-        });
+        const res = await axios.get(`${BASE_URL}/api/user/navbar`, { withCredentials: true });
         setMyId(res.data._id);
       } catch (err) {
         console.error("Error fetching logged-in user:", err);
       }
     };
-
     fetchMe();
   }, []);
 
   const refreshChats = async () => {
     setLoading(true);
     try {
-      const chatRes = await axios.get(`${BASE_URL}/api/chats/mychats`, {
-        withCredentials: true,
-      });
+      const chatRes = await axios.get(`${BASE_URL}/api/chats/mychats`, { withCredentials: true });
       const chats = chatRes.data || [];
       setLoading(false);
       setChatList(chats);
 
-      const followRes = await axios.get(`${BASE_URL}/api/users/following`, {
-        withCredentials: true,
-      });
+      const followRes = await axios.get(`${BASE_URL}/api/users/following`, { withCredentials: true });
       const following = followRes.data || [];
       setFollowingList(following);
 
-      // merge chats + following
       const mergedList = [
         ...chats.map((chat) => {
           const other = chat.participants.find((p) => p._id !== myId);
@@ -74,14 +64,8 @@ const ChatPage = () => {
             updatedAt: chat.updatedAt,
           };
         }),
-
         ...following
-          .filter(
-            (u) =>
-              !chats.some((chat) =>
-                chat.participants.some((p) => p._id === u._id)
-              )
-          )
+          .filter((u) => !chats.some((chat) => chat.participants.some((p) => p._id === u._id)))
           .map((u) => ({
             id: u._id,
             name: u.name,
@@ -95,7 +79,6 @@ const ChatPage = () => {
       ];
 
       mergedList.sort((a, b) => b.updatedAt - a.updatedAt);
-
       setFinalList(mergedList);
     } catch (err) {
       console.error("Error refreshing chats:", err);
@@ -104,48 +87,23 @@ const ChatPage = () => {
 
   useEffect(() => {
     if (!myId) return;
-
-    // Prevent duplicate connections. Identity now comes from the JWT cookie on the
-    // handshake, so there is no auth payload to set — just connect if we aren't already.
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const handleConnect = () => //console.log("Socket connected (client):", socket.id);
-    socket.on("connect", handleConnect);
-
+    if (!socket.connected) socket.connect();
     refreshChats();
-
-    return () => {
-       socket.off("connect", handleConnect);
-       //DON'T disconnect on unmount - keep socket alive
-       // Socket stays connected for the entire app session
-     };
   }, [myId]);
 
-  // clicking "Message" button from another page
   useEffect(() => {
     const run = async () => {
       if (!location.state) return;
-
       const { id, name, profilePic } = location.state;
-
       setCurrentChatUser({ id, name, profilePic });
-
       try {
-        const res = await axios.post(
-          `${BASE_URL}/api/chats/mark-read/${id}`,
-          {},
-          { withCredentials: true }
-        );
-
+        const res = await axios.post(`${BASE_URL}/api/chats/mark-read/${id}`, {}, { withCredentials: true });
         setChatId(res.data.chatId);
         setOpenChat(true);
       } catch (err) {
         console.error("Error marking read:", err);
       }
     };
-
     run();
   }, [location.state]);
 
@@ -156,127 +114,82 @@ const ChatPage = () => {
     setSelectedUserId(id);
 
     try {
-      await axios.post(
-        `${BASE_URL}/api/chats/mark-read/${id}`,
-        {},
-        { withCredentials: true }
-      );
+      await axios.post(`${BASE_URL}/api/chats/mark-read/${id}`, {}, { withCredentials: true });
     } catch (err) {
       console.error("Error marking read:", err);
     }
-
     refreshChats();
   };
 
+  const visibleList = search
+    ? finalList.filter((u) => u.name?.toLowerCase().includes(search.toLowerCase()))
+    : finalList;
+
   return (
-    <div className="flex w-full h-screen overflow-hidden bg-black">
-      {/* LEFT PANEL */}
+    <div className="flex w-full h-screen overflow-hidden bg-main dark:bg-dmain">
+      <Rail />
+
       {loading ? (
         <BareBonesChatPage />
       ) : (
-        <section className="min-w-[300px] w-[400px] bg-lightMain dark:bg-dfadeColor h-full border-r-[1px] border-borderColor dark:border-dborderColor flex flex-col">
-
-          {/* Header */}
-          <div className="w-full h-fit py-[10px] bg-main dark:bg-dmain flex flex-col">
-            <div className="w-full h-[35px] flex relative">
-              <div
-                className="absolute top-1/2 -translate-y-[50%] flex items-center cursor-pointer"
-                onClick={() => navigate(-1)}
-              >
-                <ChevronLeft
-                  className="text-txt2 dark:text-dtxt"
-                  size={28}
-                />
-              </div>
-
-              <div className="w-full h-full mb-[10px] flex justify-center items-center font-semibold text-[1.3rem] text-transparent bg-clip-text bg-gradient-main">
-                <h1 className="text-transparent bg-clip-text bg-gradient-mainBright">
-                  Messages
-                </h1>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="flex w-full h-[45px] rounded-[10px] items-center px-[10px]">
-              <div className="rounded-[10px] relative w-full h-4/5">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-txt2 dark:text-dtxt2"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder="Search"
-                  className="w-full h-full pl-10 rounded-[10px] bg-lightMain dark:bg-dfadeColor"
-                />
-              </div>
+        <section className="w-[320px] shrink-0 bg-main dark:bg-[#0e0e0e] h-full border-r border-hairline dark:border-dhairline flex flex-col">
+          <div className="h-[112px] p-5 flex flex-col gap-3 shrink-0">
+            <h1 className="text-[22px] font-bold text-txt dark:text-dtxt">Messages</h1>
+            <div className="relative">
+              <Search size={16} className="absolute left-[14px] top-1/2 -translate-y-1/2 text-txt2 dark:text-[#8a8a8a]" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                className="w-full pl-[38px] pr-3 py-[9px] rounded-full text-sm bg-slightLightMain dark:bg-[#1c1c1c] text-txt dark:text-dtxt placeholder:text-txt2 dark:placeholder:text-[#8a8a8a] outline-none focus-visible:ring-2 focus-visible:ring-accentMain"
+              />
             </div>
           </div>
 
-          {/* Chat List */}
-          <section className="w-full h-full overflow-y-auto">
-            {finalList.length === 0 ? (
-              <p></p>
-            ) : (
-              finalList.map((user) => (
+          <section className="flex-1 overflow-y-auto custom-scrollbar">
+            {visibleList.map((user) => {
+              const selected = selectedUserId === user.id;
+              const unread = user.unreadCount > 0;
+              return (
                 <div
-                  onClick={() =>
-                    handleOpenChat(
-                      user.chatId,
-                      user.id,
-                      user.name,
-                      user.profilePic
-                    )
-                  }
+                  onClick={() => handleOpenChat(user.chatId, user.id, user.name, user.profilePic)}
                   key={user.id}
-                  className={`w-full h-[60px] flex flex-row items-center gap-4 p-3 cursor-pointer 
-                    ${selectedUserId === user.id ? "border-y-[1px] bg-main dark:bg-dlightMain" : ""}`}
+                  className={`h-[72px] flex items-center gap-3 px-5 cursor-pointer relative border-b border-hairline dark:border-[#1c1c1c]
+                    ${selected ? "bg-lightMain dark:bg-[#1a1a1a]" : ""}`}
                 >
-                  {/* PFP */}
-                  <div className="h-fit w-fit">
-                    {user.profilePic ? (
-                      <img
-                        src={user.profilePic}
-                        alt="pfp"
-                        className="w-[30px] h-[30px] rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="aspect-square min-w-[30px] border-[1px] bg-gray-400 dark:bg-[#393939] dark:border-dborderColor rounded-full flex justify-center items-end overflow-hidden">
-                        <i className="fa-solid fa-user text-[1.5rem] text-gray-200 dark:text-gray-400"></i>
-                      </div>
-                    )}
-                  </div>
+                  {selected && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-main" />}
 
-                  {/* Name + Last Msg */}
-                  <div className="flex flex-col flex-1">
-                    <p>{user.name}</p>
-                    <p className="text-[0.9rem] text-txt2 dark:text-dtxt2">
-                      {user.lastMessage
-                        ? user.lastMessage.length > 20
-                          ? user.lastMessage.slice(0, 20) + "…"
-                          : user.lastMessage
-                        : "No messages yet"}
+                  {user.profilePic ? (
+                    <img src={user.profilePic} alt="" className="w-[38px] h-[38px] rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-[38px] h-[38px] rounded-full bg-lightMain2 dark:bg-[#393939] flex items-center justify-center shrink-0">
+                      <span className="text-gray-400 text-xs">{user.name?.[0]}</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <p className={`text-sm truncate ${unread ? 'font-semibold text-txt dark:text-dtxt' : 'font-medium text-lightTxt dark:text-[#d0d0d0]'}`}>{user.name}</p>
+                    <p className="text-[12.5px] text-txt2 dark:text-[#8a8a8a] truncate">
+                      {user.lastMessage || "No messages yet"}
                     </p>
                   </div>
 
-                  {/* Time + Unread */}
-                  <div className="flex flex-col justify-between items-end">
-                    {user.unreadCount > 0 && (
-                      <div className="w-[20px] h-fit aspect-square text-[0.9rem] font-bold bg-gradient-main text-dtxt dark:text-txt rounded-full flex justify-center items-center">
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <p className="text-[11px] text-txt2 dark:text-[#8a8a8a]">{formatTime(user.updatedAt)}</p>
+                    {unread && (
+                      <div className="min-w-[18px] h-[18px] px-1 text-[11px] font-bold bg-gradient-main text-black rounded-full flex justify-center items-center">
                         {user.unreadCount}
                       </div>
                     )}
-                    <p className="text-[0.8rem] text-txt2 dark:text-dtxt2">
-                      {formatTime(user.updatedAt)}
-                    </p>
                   </div>
                 </div>
-              ))
-            )}
+              );
+            })}
           </section>
         </section>
       )}
 
-      {/* RIGHT PANEL */}
       {openChat ? (
         <ChatSectionPage
           refreshChats={refreshChats}
@@ -287,11 +200,9 @@ const ChatPage = () => {
           myId={myId}
         />
       ) : (
-        <section className="w-full bg-[url('/doodleBackgroundWhite.png')] dark:bg-[url('/doodleBackgroundDark.png')] h-full flex flex-col items-center justify-center">
+        <section className="flex-1 bg-[url('/doodleBackgroundWhite.png')] dark:bg-[url('/doodleBackgroundDark.png')] h-full flex flex-col items-center justify-center">
           <Lottie animationData={msgPlane} loop className="h-[300px]" />
-          <p className="text-txt2 dark:text-dtxt2 text-xl font-light">
-            Your chats appear here
-          </p>
+          <p className="text-txt2 dark:text-dtxt2 text-xl font-light">Your chats appear here</p>
         </section>
       )}
     </div>

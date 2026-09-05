@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 
-const CustomMarker = ({ memory, onClick, isExiting = false, shouldAnimateIn = true }) => {
+const CustomMarker = ({ memory, onClick, isExiting = false, shouldAnimateIn = true, dimmed = false }) => {
   const markerRef = useRef(null);
 
   /*
@@ -29,16 +29,17 @@ const CustomMarker = ({ memory, onClick, isExiting = false, shouldAnimateIn = tr
   const customIcon = L.divIcon({
     className: "", // removes default leaflet marker styles
     html: `
-    <div class="w-16 h-[70px] relative hover:scale-[1.08] transition-transform duration-200 origin-bottom">
-      <div class="relative z-20 w-16 h-16 rounded-lg border-[2px] border-dmain dark:border-main bg-gray-500 bg-cover bg-center shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
+    <div class="w-14 h-[62px] relative hover:scale-[1.08] transition-transform duration-200 origin-bottom" style="opacity:${dimmed ? 0.35 : 1}">
+      <div class="absolute left-1/2 -translate-x-1/2 bg-black/40 pointer-events-none" style="bottom:-8px; width:30px; height:10px; border-radius:50%;"></div>
+      <div class="relative z-20 w-14 h-14 rounded-lg border-[2px] border-dmain dark:border-main bg-gray-500 bg-cover bg-center"
         style="background-image: url('${memory.photoUrl}')">
       </div>
-      <div class="z-10 absolute left-1/2 -translate-x-1/2 bottom-0 w-3 aspect-square rotate-45 bg-dmain dark:bg-main shadow-[0_2px_4px_rgba(0,0,0,0.25)]"></div>
+      <div class="z-10 absolute left-1/2 -translate-x-1/2 bottom-0 w-[11px] aspect-square rotate-45 bg-dmain dark:bg-main"></div>
     </div>
     `,
-    iconSize: [64, 70],
-    iconAnchor: [32, 70], // horizontally centred; vertically at the tail tip
-    popupAnchor: [0, -72], // just above the photo, clear of the tail
+    iconSize: [56, 62],
+    iconAnchor: [28, 62], // horizontally centred; vertically at the tail tip
+    popupAnchor: [0, -64], // just above the photo, clear of the tail
   });
 
   useEffect(() => {

@@ -19,9 +19,7 @@ const MemoryCard = ({ memory, onDelete, onEdit, currentUserId }) => {
     }
   };
 
-  const openPostModal = () => {
-    setShowPostModal(true);
-  };
+  const openPostModal = () => setShowPostModal(true);
 
   useEffect(() => {
     if (showPostModal) document.body.style.overflow = 'hidden';
@@ -30,30 +28,47 @@ const MemoryCard = ({ memory, onDelete, onEdit, currentUserId }) => {
 
   return (
     <>
-      <div className="relative h-[250px] bg-lightMain dark:bg-dlightMain shadow-md overflow-hidden transition duration-300">
-        <img
-          src={memory.photoUrl}
-          alt={memory.title}
-          onClick={openPostModal} 
-          className="w-full h-full object-cover cursor-pointer transition-all duration-500 hover:scale-105"
-        />
+      <div className="rounded-xl border border-hairline dark:border-dhairline overflow-hidden">
+        <div className="relative h-[170px] bg-lightMain dark:bg-dlightMain">
+          <img
+            src={memory.photoUrl}
+            alt={memory.title}
+            onClick={openPostModal}
+            className="w-full h-full object-cover cursor-pointer"
+          />
 
-        <div className="absolute bottom-3 left-3 flex gap-3 z-20 pointer-events-none">
-            <button onClick={(e) => { e.stopPropagation(); handleLike(e); }} className="pointer-events-auto flex items-center gap-1 bg-black/40 backdrop-blur-md text-white px-2 py-1 rounded-full text-xs hover:scale-105 transition">
-                <Heart size={14} className={likes.includes(currentUserId) ? "fill-red-500 text-red-500" : ""} />
-                {likes.length}
+          <div className="absolute bottom-[10px] left-[10px] flex gap-2 z-20">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleLike(e); }}
+              className="flex items-center gap-1 bg-black/55 backdrop-blur-md text-white px-[9px] py-1 rounded-full text-[11.5px] font-semibold"
+            >
+              <Heart size={13} className={likes.includes(currentUserId) ? "fill-red-500 text-red-500" : ""} />
+              {likes.length}
             </button>
-            <button onClick={(e) => { e.stopPropagation(); openPostModal(); }} className="pointer-events-auto flex items-center gap-1 bg-black/40 backdrop-blur-md text-white px-2 py-1 rounded-full text-xs">
-                <MessageCircle size={14} />
-                {memory.comments?.length || 0}
+            <button
+              onClick={(e) => { e.stopPropagation(); openPostModal(); }}
+              className="flex items-center gap-1 bg-black/55 backdrop-blur-md text-white px-[9px] py-1 rounded-full text-[11.5px] font-semibold"
+            >
+              <MessageCircle size={13} />
+              {memory.comments?.length || 0}
             </button>
+          </div>
+        </div>
+
+        <div className="px-3 pt-[10px] pb-3 cursor-pointer" onClick={openPostModal}>
+          <p className="text-sm font-semibold text-txt dark:text-dtxt truncate">{memory.title}</p>
+          <p className="text-xs text-txt2 dark:text-dtxt2 truncate mt-0.5">
+            {[memory.location?.address, memory.createdAt ? new Date(memory.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
         </div>
       </div>
 
-     {showPostModal && (
-        <PostModal 
-          memoryId={memory._id} 
-          currentUserId={currentUserId} 
+      {showPostModal && (
+        <PostModal
+          memoryId={memory._id}
+          currentUserId={currentUserId}
           onClose={() => setShowPostModal(false)}
           onEdit={onEdit}
           onDelete={() => onDelete && onDelete(memory._id)}

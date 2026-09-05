@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import MemoryCard from "../components/Memories/MemoryCard";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
-import Navbar from "../components/Layout/Navbar";
+import Rail from "../components/Layout/Rail";
 import BareHomePage from './BarebonesPages/BareProfilePage';
 import { useTheme } from "../context/ThemeContext";
 import animationData from "../data/animationData/emptyAnimation.json";
@@ -11,7 +11,7 @@ import Lottie from "lottie-react";
 
 
 import axios from "axios";
-import { ChevronLeft, ChevronRight, UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, UserPlus, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const MemoriesPage = () => {
@@ -212,19 +212,25 @@ const MemoriesPage = () => {
 }, [id]);
 
 if (!id || loading) {
-     return <BareHomePage />;
-
+     return (
+       <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
+         <Rail />
+         <div className="flex-1 min-w-0">
+           <BareHomePage />
+         </div>
+       </div>
+     );
   }
 
 
 
   return (
-    <div className="bg-main dark:bg-dmain w-full min-h-screen flex flex-col px-[30px] pb-[10px]">
-
-      <Navbar />
+    <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
+      <Rail />
+      <div className="flex-1 min-w-0 flex flex-col px-[30px] pb-[10px] overflow-y-auto">
 
       {/* Profile Header */}
-      <div className="mt-[70px] flex flex-col items-center">
+      <div className="mt-[30px] flex flex-col items-center">
         <div className="w-full pb-[50px]">
           <div className="h-[200px] flex items-center border-b border-borderColor dark:border-dborderColor">
 
@@ -237,7 +243,7 @@ if (!id || loading) {
                 />
               ) : (
                 <div className="w-36 h-36 rounded-full bg-gray-300 flex items-end justify-center overflow-hidden">
-                  <i className="fa-solid fa-user text-[7rem] text-gray-500"></i>
+                  <User size={112} className="text-gray-500" />
                 </div>
               )}
             </div>
@@ -313,7 +319,7 @@ if (!id || loading) {
                     {user.profilePic ? (
                       <img src={user.profilePic} className="w-full h-full object-cover" />
                     ) : (
-                      <i className="fa-solid fa-user text-[4rem] text-gray-200 dark:text-gray-400 "></i>
+                      <User size={48} className="text-gray-200 dark:text-gray-400" />
                     )}
                   </div>
                   <div className="py-[5px] text-lightTxt dark:text-dlightTxt">{user.name}</div>
@@ -373,6 +379,7 @@ if (!id || loading) {
           <ChevronRight />
         </button>
       </section>
+      </div>
     </div>
   );
 };

@@ -1,58 +1,51 @@
-import { Locate, Layers2, X, Plus } from "lucide-react";
-import React, { useState,useEffect } from "react";
+import { Layers2, X, Plus, Search, User, Locate } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import MapView from "../components/Map/MapView";
 
-import Navbar from "../components/Layout/Navbar";
-import GradientText from "../components/Layout/GradientText";
-import { useTheme } from "../context/ThemeContext";
+import Rail from "../components/Layout/Rail";
+import { MobileTopBar, MobileTabBar, MobileFab } from "../components/Layout/MobileNav";
 import { useHome } from "../context/HomeContext";
+import { useTheme } from "../context/ThemeContext";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
-import { shortenText } from "../utils/textShorten";
-import ShinyText from '../components/Layout/ShinyText';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 import axios from "axios";
 
-/*
-Shared appearance for the floating map controls, so the set stays visually consistent —
-previously each button re-declared its own size, shadow and background, which is how they
-drifted into three different treatments.
-
-Split into base + state so only the *background* varies between them; size, shape, shadow,
-border width, transition and focus ring are identical for every control in the stack.
-*/
-const mapControlBtn =
-  "w-[50px] aspect-square rounded-full grid place-content-center border-[1px] " +
-  "shadow-lg transition-all duration-200 active:scale-95 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentMain focus-visible:ring-offset-2";
-
-const mapControlBtnIdle =
-  "bg-main dark:bg-dlightMain text-txt dark:text-dtxt " +
-  "border-borderColor dark:border-dborderColor hover:bg-lightMain dark:hover:bg-dlightMain2";
-
-const mapControlBtnActive =
-  "bg-dmain dark:bg-main text-white dark:text-black border-transparent";
-
 const HomePage = () => {
-  const BASE_URL=import.meta.env.VITE_BASE_URL || "http://localhost:5000";
-  const { dark } = useTheme();
+  const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
   const { homePosition, loading } = useHome();
-    const navigate = useNavigate();
-  const [addingMode, setAddingMode] = useState(false);
+  const { dark } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [addingMode, setAddingMode] = useState(!!location.state?.startAddMemory);
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [followList, setFollowList] = useState(false);
+  const [followSearch, setFollowSearch] = useState("");
   const [memories, setMemories] = useState([]);
-  const [friendMemories,setFriendMemories] = useState([]);
+  const [friendMemories, setFriendMemories] = useState([]);
   const [following, setFollowing] = useState([]);
   const [activePinPeople, setActivePinPeople] = useState([]);
   const [applyLoading, setApplyLoading] = useState(false);
 
   const handleMapClick = (latlng) => {
+    // Form already open — this is a re-click to relocate the pending pin, not a fresh
+    // placement, so keep the panel open and just move it.
+    if (showForm) {
+      setSelectedPosition(latlng);
+      return;
+    }
     if (!addingMode) return;
     setSelectedPosition(latlng);
     setShowForm(true);
     setAddingMode(false);
+  };
+
+  // Lets the placeholder pin be dragged to the exact spot after the initial click,
+  // instead of forcing a re-click on the map — AddMemoryForm re-syncs its lat/lng fields
+  // from `selectedPosition` automatically.
+  const handlePendingPositionChange = (latlng) => {
+    setSelectedPosition(latlng);
   };
 
   const handleFormClose = () => {
@@ -60,331 +53,272 @@ const HomePage = () => {
     setSelectedPosition(null);
   };
 
-const toggleFollowingList = () => {
-  setFollowList(prev => !prev);
-};
-
-const fetchFollowing = async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/api/users/following`, {
-      withCredentials: true,
-    });
-    setFollowing(res.data || []);
-  } catch (err) {
-    console.error("Error fetching following list:", err);
-  }
-};
-
-
-
- const applyFilter = async () => {
-  setApplyLoading(true);
-  try {
-    const res = await axios.post(
-      `${BASE_URL}/api/memory/friendMemory`,
-      { userIds: activePinPeople },
-      { withCredentials: true }
-    );
-
-    setFriendMemories(res.data);
-
-  } catch (err) {
-    console.error("Error applying filter:", err);
-  }
-  setApplyLoading(false);
-  toggleFollowingList();
-};
-
-
-
-  //Resets map view to current home position
-  const resetToAutoLocation = () => {
-    if (!homePosition) return alert("Home location not available.");
-    // You could also trigger map pan programmatically if you store the map ref in context
-    alert("Reset to your current home location!");
+  const toggleFollowingList = () => {
+    setFollowList(prev => !prev);
   };
 
-  
-  //fetch memories on mount
-  useEffect(()=>{
-   const fetchMemories=async()=>{
-    try{
-        const res= await axios.get(`${BASE_URL}/api/memory/fetchmemory`, {withCredentials: true // crucial for sending cookies
-   });
-        setMemories([...memories, ...(res.data.memories || [])]);
+  const fetchFollowing = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/api/users/following`, {
+        withCredentials: true,
+      });
+      setFollowing(res.data || []);
+    } catch (err) {
+      console.error("Error fetching following list:", err);
     }
-    catch(err){
-      console.error("Failed to fetch memories:",err);
+  };
+
+  const applyFilter = async () => {
+    setApplyLoading(true);
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/api/memory/friendMemory`,
+        { userIds: activePinPeople },
+        { withCredentials: true }
+      );
+      setFriendMemories(res.data);
+    } catch (err) {
+      console.error("Error applying filter:", err);
     }
-   }
-   fetchMemories();
-  },[]);
+    setApplyLoading(false);
+    toggleFollowingList();
+  };
+
+  // fetch memories on mount
+  useEffect(() => {
+    const fetchMemories = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/api/memory/fetchmemory`, { withCredentials: true });
+        setMemories(res.data.memories || []);
+      } catch (err) {
+        console.error("Failed to fetch memories:", err);
+      }
+    };
+    fetchMemories();
+  }, []);
+
+  const visibleFollowing = followSearch
+    ? following.filter(p => p.name?.toLowerCase().includes(followSearch.toLowerCase()))
+    : following;
 
   return (
-    <div className="w-[100vw] h-[100vh] bg-main dark:bg-dmain relative">
-      <div className="h-full w-full relative overflow-hidden">
-        {/* 🔹 Hide Navbar in add mode */}
-        {!addingMode && <Navbar />}
+    <div className="w-screen h-screen bg-main dark:bg-dmain flex flex-col md:flex-row overflow-hidden">
+      {!addingMode && <Rail />}
+      {!addingMode && <MobileTopBar />}
 
-        {/* 🔹 Add mode info bar */}
+      <div className="flex-1 relative overflow-hidden">
+        {/* Add mode banner */}
         {addingMode && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1001] px-4 py-2 rounded-full bg-dmain/80 dark:bg-main/80 text-dtxt dark:text-txt font-medium shadow-md text-sm backdrop-blur-sm">
-            Add Memory Mode - Click on the map to add a memory
+          <div
+            className="absolute z-[1001] left-6 top-6 flex items-center gap-2 px-4 py-2 rounded-full text-txt dark:text-white text-sm border border-hairline dark:border-transparent"
+            style={{ background: dark ? 'rgba(23,23,23,.92)' : 'rgba(255,255,255,.92)', backdropFilter: 'blur(10px)' }}
+          >
+            <span className="w-[7px] h-[7px] rounded-full bg-gradient-main" />
+            Placing a memory — drag the pin to adjust
           </div>
         )}
 
-        {/* 🔹 Map */}
+        {addingMode && (
+          <button
+            onClick={() => {
+              if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  const { latitude, longitude } = pos.coords;
+                  setSelectedPosition({ lat: latitude, lng: longitude });
+                  setShowForm(true);
+                  setAddingMode(false);
+                },
+                (err) => {
+                  if (err.code === 1) alert("Location access denied. Please enable location permission for this website in your browser settings.");
+                  else if (err.code === 2) alert("Location unavailable. Try again in a few seconds.");
+                  else alert("Failed to get location. Please try again.");
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+              );
+            }}
+            aria-label="Add memory at your current location"
+            title="Add memory at your current location"
+            className="absolute z-[1001] left-6 top-[76px] w-[44px] h-[44px] rounded-full grid place-content-center text-txt dark:text-white
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentMain focus-visible:ring-offset-2"
+            style={{
+              background: dark ? 'rgba(23,23,23,.9)' : 'rgba(255,255,255,.9)',
+              backdropFilter: 'blur(10px)',
+              border: dark ? '1px solid #2b2b2b' : '1px solid #e6e4e0',
+            }}
+          >
+            <Locate size={20} />
+          </button>
+        )}
+
         {!loading && (
           <MapView
             friendMemories={friendMemories}
             memories={memories}
             homePosition={homePosition}
-            addingMode={addingMode}
+            addingMode={addingMode || showForm}
             onMapClick={handleMapClick}
+            pendingPosition={showForm ? selectedPosition : null}
+            onPendingPositionChange={handlePendingPositionChange}
           />
         )}
 
-        {/* 🔹 Hint text */}
+        {/* Top-left cluster: friends' pins toggle */}
         {!addingMode && (
-          <div className="w-fit absolute bottom-[20px] left-1/2 -translate-x-1/2 z-[950]">
-             <ShinyText
-               text="<< Click on any marker to view memories from that location >>"
-               disabled={false}
-               speed={2.5}
-               className="text-sm tracking-wide"
-             />
-           </div>
-
+          <div className="absolute z-[1000] left-6 top-6 flex items-center gap-[10px]">
+            <button
+              onClick={() => { toggleFollowingList(); fetchFollowing(); }}
+              aria-label="Toggle friends' pins"
+              aria-expanded={followList}
+              className="flex items-center gap-2 h-[38px] px-[14px] rounded-full text-[12.5px] text-txt dark:text-white
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentMain focus-visible:ring-offset-2"
+              style={{
+                background: dark ? 'rgba(23,23,23,.9)' : 'rgba(255,255,255,.9)',
+                backdropFilter: 'blur(10px)',
+                border: dark ? '1px solid #2b2b2b' : '1px solid #e6e4e0',
+              }}
+            >
+              <Layers2 size={16} />
+              Friends' pins{following.length > 0 ? ` · ${following.length}` : ''}
+            </button>
+          </div>
         )}
 
-        <div className="h-[30px] bg-[linear-gradient(to_top,theme(colors.fadeColor)_10%,transparent_100%)] 
-          dark:bg-[linear-gradient(to_top,theme(colors.dfadeColor)_10%,transparent_100%)] fixed z-[900] bottom-[0px] py-[5px] left-0 right-0 px-[20px]"></div>
-
-        {/*
-          Map control stack.
-
-          Previously these three buttons each had their own background treatment
-          (bg-dlightMain + border / bg-main no border / bg-dborderColor), and the Locate
-          button was positioned separately at left-[80px] while the other two stacked at
-          left-[20px] — so they read as three unrelated widgets rather than one set of
-          controls. Now they share a single `mapControlBtn` base, stack in one column, and
-          Locate joins the stack instead of floating beside it.
-
-          The add button's `+` was a literal text character at text-[2rem] while its
-          siblings were Lucide icons — different rendering path, so it never optically
-          aligned. It's the Lucide <Plus> now, and the rotate-45 trick that turns it into
-          an X still works because the icon rotates the same way the glyph did.
-        */}
-        <div className="absolute bottom-[20px] left-[20px] z-[1000] flex flex-col gap-[10px]">
-          {/* Friends' pins layer toggle */}
-          <button
-            onClick={() => { toggleFollowingList(); fetchFollowing(); }}
-            aria-label="Toggle friends' pins"
-            aria-expanded={followList}
-            className={`${mapControlBtn} ${followList ? mapControlBtnActive : mapControlBtnIdle}`}
-          >
-            <Layers2 size={22} />
-          </button>
-
-          {/* Use my current location — only meaningful while placing a memory, so it
-              appears with adding mode rather than being always-on. */}
-          {addingMode && (
-            <button
-              onClick={() => {
-                if (!navigator.geolocation) {
-                  alert("Geolocation is not supported by your browser.");
-                  return;
-                }
-
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const { latitude, longitude } = pos.coords;
-                    const latlng = { lat: latitude, lng: longitude };
-                    setSelectedPosition(latlng);
-                    setShowForm(true);
-                    setAddingMode(false);
-                  },
-                  (err) => {
-                    if (err.code === 1) {
-                      alert(
-                        "Location access denied. Please enable location permission for this website in your browser settings."
-                      );
-                    } else if (err.code === 2) {
-                      alert("Location unavailable. Try again in a few seconds.");
-                    } else {
-                      alert("Failed to get location. Please try again.");
-                    }
-                  },
-                  { enableHighAccuracy: true, timeout: 10000 }
-                );
-              }}
-              aria-label="Add memory at your current location"
-              title="Add memory at your current location"
-              className={`${mapControlBtn} ${mapControlBtnIdle}`}
-            >
-              <Locate size={22} />
-            </button>
-          )}
-
-          {/* Add / Cancel — the primary action, so it sits last (closest to the thumb on
-              mobile) and is the only one that gets the accent treatment. */}
-          <button
-            onClick={() => {
-              setAddingMode((prev) => !prev);
-              setSelectedPosition(null);
-            }}
-            aria-label={addingMode ? "Cancel adding memory" : "Add new memory"}
-            aria-pressed={addingMode}
-            title={addingMode ? "Cancel adding memory" : "Add new memory"}
-            className={`${mapControlBtn} ${
-              addingMode
-                ? "bg-red-500 text-white border-red-500 rotate-45"
-                : "bg-gradient-mainBright text-white border-transparent hover:brightness-110"
-            }`}
-          >
-            <Plus size={24} />
-          </button>
-        </div>
-
-        {(followList)?
-        <div className="absolute z-[1000] left-[80px] bottom-[80px] w-[200px] h-fit rounded-md overflow-hidden dark:bg-dlightMain bg-lightMain border-[1px] border-borderColor dark:border-dborderColor">
-          <section className="w-full dark:bg-dmain bg-main  text-center h-[40px] flex items-center justify-center border-b-[1px] border-borderColor dark:border-dborderColor">
-             <p className="text-[1.1rem] font-semibold text-transparent bg-clip-text bg-gradient-main ">Friend's Pins</p>
-             <button onClick={toggleFollowingList} className="absolute right-1 scale-[0.8]"><X/></button>
-          </section>
-
-         {following.length === 0 ? (
-  <section className="w-full h-fit text-center">
-    <p className="h-fit px-2 py-2">
-      Follow people to see their pins
-    </p>
-  </section>
-     ) : (
-  <section className="w-full h-fit max-h-[122px] overflow-y-auto custom-scrollbar">
-   {following.map((people) => ( 
-  <div 
-    key={people._id} 
-    className="w-full h-fit flex items-center dark:hover:bg-dlightMain2 hover:bg-main bg-lightMain dark:bg-dlightMain border-b-[1px] border-borderColor dark:border-dborderColor cursor-pointer" 
-    onClick={() => {
-      const checkbox = document.getElementById(`chk-${people._id}`);
-      if (checkbox) checkbox.click();
-    }}
-    onDoubleClick={() => navigate(`/profile/${people._id}`)} 
-  > 
-    <div className="w-fit h-fit px-2 flex items-center"> 
-      <div 
-        onClick={(e) => e.stopPropagation()} 
-        onDoubleClick={(e) => e.stopPropagation()} 
-        className="mr-3" 
-      > 
-        <label 
-          htmlFor={`chk-${people._id}`} 
-          className=" 
-            w-4 h-4 rounded 
-            border border-borderColor dark:border-dborderColor
-            bg-white dark:bg-black 
-            flex items-center justify-center 
-            cursor-pointer 
-            relative 
-          " 
-        > 
-          <input 
-            type="checkbox" 
-            id={`chk-${people._id}`} 
-            className="absolute opacity-0 peer"
-            checked={activePinPeople.includes(people._id)} //to remember who is already checked
-            onChange={(e) => {
-              if (e.target.checked) {
-                setActivePinPeople(prev => [...prev, people._id]);
-              } else {
-                setActivePinPeople(prev =>
-                  prev.filter(id => id !== people._id)
-                );
-              }
-            }} 
-          /> 
-          <svg 
-            className=" 
-              w-3 h-3 
-              text-black dark:text-white 
-              hidden peer-checked:block 
-            " 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="3" 
-            viewBox="0 0 24 24" 
-          > 
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              d="M5 13l4 4L19 7" 
-            /> 
-          </svg> 
-        </label> 
-      </div> 
-      {people.profilePic ? ( 
-        <img 
-          src={people.profilePic} 
-          className="w-6 h-6 mr-2 rounded-full border-1 border-main dark:border-dmain object-cover" 
-        /> 
-      ) : ( 
-        <div className="w-6 h-6 mr-2 rounded-full bg-gray-300 flex items-end justify-center overflow-hidden"> 
-          <i className="fa-solid fa-user text-[1rem] text-gray-500"></i> 
-        </div> 
-      )} 
-
-      <div className="flex flex-col py-2 text-left"> 
-        <span className="text-txt dark:text-dtxt font-semibold"> 
-          {shortenText(people.name,12)} 
-        </span> 
-      </div> 
-    </div> 
-  </div> 
-))}
-  </section>
-   )}
-   {following.length !== 0 ? (
-   <section className="w-full h-[45px] flex gap-2 items-center p-2">
-       <button 
-         className="bg-dmain h-full text-dtxt dark:bg-main rounded-sm dark:text-txt w-full"
-         onClick={() => {
-           setActivePinPeople([]);
-           following.forEach((people) => {
-             const checkbox = document.getElementById(`chk-${people._id}`);
-             if (checkbox && checkbox.checked) {
-               checkbox.checked = false;
-             }
-           });
-         }}
-       >
-         Clear
-       </button>
-       <button onClick={applyFilter} className="bg-gradient-main rounded-sm text-dtxt h-full w-full">
-         {applyLoading?
-         <p>Applying...</p>
-         :
-         <p>Apply</p>
-         }
+        {/* Add / Cancel FAB */}
+        <button
+          onClick={() => {
+            setAddingMode((prev) => !prev);
+            setSelectedPosition(null);
+          }}
+          aria-label={addingMode ? "Cancel adding memory" : "Add new memory"}
+          aria-pressed={addingMode}
+          className={`hidden md:flex absolute z-[1000] right-6 bottom-6 items-center gap-2 h-[48px] px-5 rounded-full text-white text-sm font-semibold
+                      transition-all duration-200 active:scale-95 shadow-[0_12px_32px_rgba(0,0,0,.5)]
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentMain focus-visible:ring-offset-2
+                      ${addingMode ? "bg-red-500" : "bg-gradient-mainBright"}`}
+        >
+          {addingMode ? <X size={20} /> : <Plus size={20} />}
+          {addingMode ? "Cancel" : "New memory"}
         </button>
-   </section>)
-   :
-   <></>
-   }
-        </div>
-        :
-        <></>
-        }
-        {/* 🔹 Bottom gradient */}
 
-       
-        {/* 🔹 Add Memory Form */}
+        {!addingMode && <MobileFab onClick={() => { setAddingMode(true); setSelectedPosition(null); }} />}
+        {!addingMode && <MobileTabBar />}
+
+        {/* Friends' pins panel */}
+        {followList && (
+          <div
+            className="absolute z-[1200] left-0 top-0 h-full w-[320px] bg-main dark:bg-[#0e0e0e] border-r border-hairline dark:border-dhairline flex flex-col"
+          >
+            <div className="h-[3px] w-full bg-gradient-main shrink-0" />
+            <div className="px-5 pt-5 pb-4 border-b border-hairline dark:border-dhairline">
+              <div className="flex items-center">
+                <h2 className="text-[17px] font-semibold text-txt dark:text-white">Friends' pins</h2>
+                <button onClick={toggleFollowingList} aria-label="Close" className="ml-auto text-txt2 dark:text-[#8a8a8a] hover:text-txt dark:hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="relative mt-3">
+                <Search size={14} className="absolute left-[12px] top-1/2 -translate-y-1/2 text-txt2 dark:text-[#5a5a5a]" />
+                <input
+                  type="text"
+                  value={followSearch}
+                  onChange={(e) => setFollowSearch(e.target.value)}
+                  placeholder="Search"
+                  className="w-full pl-[32px] pr-3 py-2 rounded-full text-[13px] bg-slightLightMain dark:bg-[#161616] text-txt dark:text-white placeholder:text-txt2 dark:placeholder:text-[#5a5a5a] outline-none focus-visible:ring-2 focus-visible:ring-accentMain"
+                />
+              </div>
+              <div className="flex items-center mt-3">
+                <span className="text-[12.5px] text-txt2 dark:text-[#8a8a8a]">{activePinPeople.length} of {following.length} selected</span>
+                <button
+                  onClick={() => setActivePinPeople(following.map(p => p._id))}
+                  className="ml-auto text-[12px] font-semibold text-accentMain"
+                >
+                  Select all
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {following.length === 0 ? (
+                <p className="text-center text-[12.5px] text-txt2 dark:text-[#8a8a8a] p-6">Follow people to see their pins</p>
+              ) : visibleFollowing.map((people) => {
+                const selected = activePinPeople.includes(people._id);
+                return (
+                  <div
+                    key={people._id}
+                    className={`h-[60px] px-5 flex items-center gap-3 border-b ${selected ? 'bg-lightMain dark:bg-[#1a1a1a] border-lightMain2 dark:border-[#141414]' : 'border-hairline dark:border-[#1c1c1c]'}`}
+                  >
+                    <label htmlFor={`chk-${people._id}`} className="w-[18px] h-[18px] rounded-[5px] flex items-center justify-center cursor-pointer shrink-0"
+                      style={selected ? { background: 'linear-gradient(45deg,#fc9b41,#d557e3,#3ed8e3)' } : { border: dark ? '1.5px solid #3a3a3a' : '1.5px solid #c9c5bd' }}
+                    >
+                      <input
+                        id={`chk-${people._id}`}
+                        type="checkbox"
+                        className="sr-only"
+                        checked={selected}
+                        onChange={(e) => {
+                          if (e.target.checked) setActivePinPeople(prev => [...prev, people._id]);
+                          else setActivePinPeople(prev => prev.filter(id => id !== people._id));
+                        }}
+                      />
+                      {selected && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </label>
+
+                    {people.profilePic ? (
+                      <img src={people.profilePic} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-lightMain2 dark:bg-[#3a3a3a] flex items-center justify-center shrink-0">
+                        <User size={14} className="text-gray-400" />
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/profile/${people._id}`)}
+                      className="flex flex-col text-left min-w-0"
+                    >
+                      <span className={`text-[14px] truncate ${selected ? 'font-semibold text-txt dark:text-white' : 'font-medium text-lightTxt dark:text-[#d0d0d0]'}`}>
+                        {people.name}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {following.length > 0 && (
+              <div className="shrink-0 p-4 border-t border-hairline dark:border-dhairline flex gap-2">
+                <button
+                  onClick={() => setActivePinPeople([])}
+                  className="flex-1 h-[42px] rounded-full border border-lightMain2 dark:border-[#2b2b2b] text-txt dark:text-white text-[13px] font-medium"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={applyFilter}
+                  disabled={applyLoading}
+                  className="flex-1 h-[42px] rounded-full bg-gradient-mainBright text-white text-[13.5px] font-semibold disabled:opacity-60"
+                >
+                  {applyLoading ? "Applying..." : `Show ${activePinPeople.length} pins`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {showForm && selectedPosition && (
           <AddMemoryForm position={selectedPosition} onClose={handleFormClose}
-           onAdd={(newMemory) => {
-              // Add new memory to your list
+            onAdd={(newMemory) => {
               setMemories(prev => [...prev, newMemory]);
-              setShowForm(false);} // close the form}
-           } />
+              setShowForm(false);
+            }} />
         )}
       </div>
     </div>
