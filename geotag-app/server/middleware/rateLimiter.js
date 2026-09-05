@@ -26,8 +26,20 @@ request through unlimited for that one request, rather than failing the request 
 logger: passed through so a store failure logs via the same structured pino pipeline as
 everything else (see utils/logger.js) instead of the library's console.error default — its
 call shape, logger.error(err, message), is exactly pino's.
+
+prefix: MUST be distinct per limiter. rate-limit-redis's RedisStore defaults `prefix` to
+the same "rl:" for every instance, and express-rate-limit's default keyGenerator is just
+the request IP — with no override, all three limiters below were writing to and reading
+from the exact same Redis key per IP (verified directly against
+node_modules/rate-limit-redis/dist/index.cjs's `this.prefix = options.prefix ?? "rl:"`).
+That meant they were never actually independent: enough login attempts from one IP could
+silently trip signup's much stricter 5/hour ceiling (or vice versa), even though each
+limiter's own configured `limit` implied otherwise. Found via the Phase 0 regression
+suite (server/tests/), which happened to exercise signup and login back-to-back and hit
+exactly this. Each limiter now gets its own namespaced prefix so its counter is truly its
+own.
 */
-function createRateLimiter({ windowMs, limit, message }) {
+function createRateLimiter({ windowMs, limit, message, prefix }) {
   return rateLimit({
     windowMs,
     limit,
@@ -37,6 +49,7 @@ function createRateLimiter({ windowMs, limit, message }) {
     logger,
     message: { message },
     store: new RedisStore({
+      prefix,
       sendCommand: (...args) => redis.call(...args),
     }),
   });
@@ -49,6 +62,7 @@ const loginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: 'Too many login attempts. Please try again in a few minutes.',
+  prefix: 'rl:login:',
 });
 
 //Tighter than login: account creation is rarer and abuse (mass fake accounts) is cheap
@@ -57,6 +71,7 @@ const signupLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 5,
   message: 'Too many accounts created from this address. Please try again later.',
+  prefix: 'rl:signup:',
 });
 
 //Google sign-in can't be brute-forced the way password login can — it requires a real,
@@ -67,6 +82,53 @@ const googleAuthLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 30,
   message: 'Too many requests. Please try again in a few minutes.',
+  prefix: 'rl:google:',
 });
 
-module.exports = { loginLimiter, signupLimiter, googleAuthLimiter };
+//Co-presence rollout, Phase 4. Confirm/reject take an arbitrary :id — unlike
+//GET /pending or /matches (which are already scoped to the caller's own rows and have
+//nothing to probe), a bad actor could otherwise hammer confirm/reject with guessed
+//candidate ids to fish for which ones exist via status-code differences. Not tied to
+//login/signup's counters — this has its own prefix from the start, precisely because
+//sharing one by accident is the exact bug the Phase 0 regression suite caught here.
+const coPresenceActionLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  message: 'Too many requests. Please try again in a few minutes.',
+  prefix: 'rl:copresence:',
+});
+
+//Audit finding BE-010: every mutation-heavy route below (memory create/edit/delete,
+//like, comment, follow request/confirm/unfollow, chat mark-read, home location, privacy
+//toggle) previously had no rate limiting at all — verifyToken proves who you are, but
+//nothing capped how often an authenticated caller could hit them. That's a real abuse
+//surface even for a "legitimate" account: a compromised session or a scripted client can
+//still spam comments, mass-follow/unfollow, or hammer memory creation (each of which
+//queues a Cloudinary upload and an embedding job — real downstream cost per call) with
+//no backpressure. Two separate limiters rather than one shared one, because the two
+//groups have genuinely different natural request rates and cost profiles:
+const memoryMutationLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  message: 'Too many memory changes. Please slow down and try again shortly.',
+  prefix: 'rl:memorymutation:',
+});
+
+//Likes/comments/follows are cheap individually but happen far more often in normal use
+//than creating a memory does — a looser ceiling than memoryMutationLimiter, still well
+//below what scripted spam would need.
+const socialActionLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  message: 'Too many actions. Please slow down and try again shortly.',
+  prefix: 'rl:social:',
+});
+
+module.exports = {
+  loginLimiter,
+  signupLimiter,
+  googleAuthLimiter,
+  coPresenceActionLimiter,
+  memoryMutationLimiter,
+  socialActionLimiter,
+};

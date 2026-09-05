@@ -24,6 +24,8 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoError, setPhotoError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
 
   /*
@@ -192,37 +194,42 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     }));
     data.append('photo', formData.photo);
 
-    // Create a local preview URL for optimistic update
-    const previewUrl = URL.createObjectURL(formData.photo);
+    setSubmitError("");
+    setIsSubmitting(true);
 
-    const newMemory = {
-      title: formData.title,
-      description: formData.description,
-      location: {
-        type: "Point",
-        coordinates: [
-          parseFloat(formData.longitude),
-          parseFloat(formData.latitude),
-        ],
-        address: formData.address
-      },
-      photoUrl: previewUrl,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Optimistic UI update
-    onAdd(newMemory);
-    onClose();
-
+    // BE-006 fix: this used to call onAdd()/onClose() BEFORE the request below had even
+    // been sent, then only console.error'd on failure — a rejected memory (e.g. the
+    // blank-address 500, now a 400) still looked like it saved, and the user was never
+    // told. Wait for the real response and only update the UI once it actually succeeds.
     try {
-      await axios.post(`${BASE_URL}/api/memory/creatememory`, data, {
+      const res = await axios.post(`${BASE_URL}/api/memory/creatememory`, data, {
         withCredentials: true,
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
+
+      const newMemory = res.data?.memory ?? {
+        title: formData.title,
+        description: formData.description,
+        location: {
+          type: "Point",
+          coordinates: [
+            parseFloat(formData.longitude),
+            parseFloat(formData.latitude),
+          ],
+          address: formData.address
+        },
+        photoUrl: URL.createObjectURL(formData.photo),
+        createdAt: new Date().toISOString(),
+      };
+
+      onAdd(newMemory);
+      onClose();
     } catch (err) {
       console.error("Failed to save memory:", err);
+      setSubmitError(err.response?.data?.message || "Couldn't save this memory. Please try again.");
+      setIsSubmitting(false);
     }
   };
 
@@ -405,20 +412,28 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
               />
             </div>
 
+            {submitError && (
+              <p role="alert" className="text-sm text-red-500">
+                {submitError}
+              </p>
+            )}
+
             {/* Buttons */}
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 bg-dmain text-dtxt py-3 rounded-lg font-medium hover:bg-main hover:text-txt transition"
+                disabled={isSubmitting}
+                className="flex-1 bg-dmain text-dtxt py-3 rounded-lg font-medium hover:bg-main hover:text-txt transition disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-gradient-to-r from-dorangeMain via-dpinkMain to-dcyanMain text-white py-3 rounded-lg font-medium transition"
+                disabled={isSubmitting}
+                className="flex-1 bg-gradient-to-r from-dorangeMain via-dpinkMain to-dcyanMain text-white py-3 rounded-lg font-medium transition disabled:opacity-50"
               >
-                Add Memory
+                {isSubmitting ? "Saving..." : "Add Memory"}
               </button>
             </div>
           </form>

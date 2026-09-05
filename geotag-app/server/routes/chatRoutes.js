@@ -1,7 +1,13 @@
 const express= require('express');
 const router= express.Router();
 const verifyToken= require('../middleware/verifyToken');
+const { socialActionLimiter } = require('../middleware/rateLimiter');
+const { resolveLimit } = require('../utils/pagination');
 const Chat= require('../models/chat');
+
+// Audit finding BE-011 — see utils/pagination.js.
+const DEFAULT_CHAT_LIST_LIMIT = 100;
+const MAX_CHAT_LIST_LIMIT = 300;
 const Message= require('../models/message');
 const User= require('../models/users');
 
@@ -19,7 +25,7 @@ const User= require('../models/users');
 //   }
 // });
 
-router.post("/mark-read/:otherUserId", verifyToken , async (req, res) => {
+router.post("/mark-read/:otherUserId", socialActionLimiter, verifyToken , async (req, res) => {
   const myId = req.userId;
   const otherId = req.params.otherUserId;
 
@@ -36,7 +42,7 @@ router.post("/mark-read/:otherUserId", verifyToken , async (req, res) => {
 
     res.json({ success: true,chatId: chat._id });
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'Failed to mark chat as read');
     res.status(500).json({ error: "Failed to mark as read" });
   }
 });
@@ -45,16 +51,18 @@ router.post("/mark-read/:otherUserId", verifyToken , async (req, res) => {
 router.get("/mychats",verifyToken, async(req,res)=>{
     try{
         const userId= req.userId;
+        const limit = resolveLimit(req, { defaultLimit: DEFAULT_CHAT_LIST_LIMIT, maxLimit: MAX_CHAT_LIST_LIMIT });
 
         // Find chats where user is a participant
         const chats= await Chat.find({ participants: userId })
             .populate("participants", "name profilePic") // populate participant details
-            .sort({ updatedAt: -1 }); // sort by last updated
+            .sort({ updatedAt: -1 }) // sort by last updated
+            .limit(limit);
 
         res.status(200).json(chats);
     }
     catch(err){
-        console.error("Error fetching chats:", err);
+        req.log.error({ err }, 'Error fetching chats');
         res.status(500).json({ message: "Server error" });
     }
 }

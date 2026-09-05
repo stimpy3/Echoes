@@ -35,6 +35,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const jwt = require('jsonwebtoken');
+const { isTokenDenylisted } = require('./utils/tokenDenylist');
 const { createClient: createRedisClient } = require('./utils/redisClient');
 
 const pinoHttp = require('pino-http');
@@ -49,6 +50,7 @@ const userRoutes = require("./routes/userRoutes");
 const followRequestRoutes = require("./routes/followRequestRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const messageRoutes = require("./routes/messageRoutes");
+const coPresenceRoutes = require("./routes/coPresenceRoutes"); // Co-presence rollout, Phase 4
 
 
 
@@ -173,6 +175,7 @@ app.use('/api/users',userRoutes);
 app.use("/api/follow", followRequestRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/copresence", coPresenceRoutes); // Co-presence rollout, Phase 4
 
 
 //app = normal server
@@ -230,8 +233,18 @@ io.use((socket, next) => {
     return next(new Error('unauthorized'));
   }
 
-  jwt.verify(decodeURIComponent(token), process.env.JWT_SECRET, (err, decoded) => {
+  // Audit finding BE-015 — see middleware/verifyToken.js for the full rationale;
+  // same pin applied here since this is the socket handshake's own separate
+  // jwt.verify call, not something verifyToken.js's fix already covers.
+  jwt.verify(decodeURIComponent(token), process.env.JWT_SECRET, { algorithms: ['HS256'] }, async (err, decoded) => {
     if (err) return next(new Error('unauthorized'));
+
+    // Audit finding BE-013 — same denylist check verifyToken.js's HTTP path applies,
+    // so a logged-out token can't keep an existing socket connection authenticated
+    // either. See utils/tokenDenylist.js.
+    if (await isTokenDenylisted(decoded.jti)) {
+      return next(new Error('unauthorized'));
+    }
 
     //socket.userId is now trusted, the same way req.userId is in verifyToken.js
     socket.userId = decoded.id;
@@ -253,6 +266,36 @@ doesn't currently justify. If it ever does, this line moves to its own entry poi
 nothing about the queue or worker's own code has to change.
 */
 require("./workers/embeddingWorker");
+
+/*
+Co-presence rollout, Phase 3, now wired in. Same in-process reasoning as the text-
+embedding worker above — same single-Render-instance trade-off. The one thing worth
+knowing: CLIP (Xenova/clip-vit-base-patch32) is a meaningfully bigger model than MiniLM,
+and loads lazily on this worker's FIRST real job, not at boot — see
+utils/imageEmbeddingHelper.js for why it isn't eagerly preloaded the way MiniLM is.
+That first job (in dev, in CI, or on Render) will pay real model-download time; nothing
+before that point is affected.
+*/
+require("./workers/imageEmbeddingWorker");
+
+/*
+Loose end closed: jobs/coPresenceCandidateJob.js had real logic and real tests but no
+scheduler anywhere — nothing outside the test suite ever actually called it, so in a
+real deployment it would simply never run. Same in-process worker pattern as the two
+embedding workers above; the queue side (queues/coPresenceCandidateQueue.js) registers
+a BullMQ repeatable job, hourly by default (COPRESENCE_JOB_INTERVAL_MS to override).
+Registering it is safe to do on every boot — BullMQ dedupes a repeatable job by its
+(name + pattern + jobId), so a restart doesn't create a second, competing schedule.
+The kill switch (COPRESENCE_ENABLED) doesn't need to be checked here — the job function
+itself checks it first and no-ops without touching the database when disabled.
+*/
+require("./workers/coPresenceCandidateWorker");
+const { scheduleCoPresenceCandidateJob } = require("./queues/coPresenceCandidateQueue");
+scheduleCoPresenceCandidateJob(
+  process.env.COPRESENCE_JOB_INTERVAL_MS ? Number(process.env.COPRESENCE_JOB_INTERVAL_MS) : undefined
+).catch((err) => {
+  logger.error({ err }, 'Failed to register co-presence candidate job schedule');
+});
 
 server.listen(process.env.PORT || 5000, () => {
   logger.info({ port: process.env.PORT || 5000 }, 'Server running');

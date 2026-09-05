@@ -27,7 +27,7 @@ router.get('/monthlymemorycount', verifyToken, async (req, res) => {
 
     res.status(200).json(monthlyCounts);
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'Failed to fetch monthly memory count');
     res.status(500).json({ error: "Failed to fetch monthly memory count" });
   }
 });

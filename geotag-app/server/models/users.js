@@ -27,7 +27,18 @@ const userSchema = new mongoose.Schema({
     lat: { type: Number, default: null },
     lng: { type: Number, default: null }
   },
-  isPrivate: { type: Boolean, default: false }
+  isPrivate: { type: Boolean, default: false },
+
+  /*
+  Co-presence rollout, Phase 1: additive-only, default-closed. This field controls
+  nothing yet — no route reads it to change behavior, no job considers this user a
+  candidate for anything. It exists so the Settings toggle (Navbar.jsx) has something
+  to read/write before Phase 2's candidate-generation job is allowed to look at it.
+  A user who never opts in must never appear in a single co-presence query later —
+  not "filtered out," structurally absent, because every future query for this
+  feature will require { coPresenceOptIn: true } on both sides of a pair.
+  */
+  coPresenceOptIn: { type: Boolean, default: false }
 });
 
 //#region to allow collapse

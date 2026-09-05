@@ -10,6 +10,7 @@ import ChatPage from "./pages/ChatPage";
 import AuthPage from './pages/auth/AuthPage';
 import ProfilePage from "./pages/ProfilePage";
 import ExplorePage from './pages/ExplorePage';
+import CoPresenceMatchesPage from './pages/CoPresenceMatchesPage';
 import { ThemeProvider } from "./context/ThemeContext";
 import { HomeProvider } from "./context/HomeContext";
 
@@ -30,6 +31,7 @@ function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/copresence" element={<CoPresenceMatchesPage />} />
           <Route path="/" element={<AuthPage />} />
         </Routes>
       </div>

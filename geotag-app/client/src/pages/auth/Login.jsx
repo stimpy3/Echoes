@@ -9,6 +9,7 @@ import axios from "axios";
 import BareHomePage from '../BarebonesPages/BareHomePage';
 import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
+import { setCsrfToken } from '../../utils/csrf';
 
 
 const Login = ({ onSwitchToSignup }) => {
@@ -53,6 +54,7 @@ const Login = ({ onSwitchToSignup }) => {
     password: formData.password
   }, { withCredentials: true });
 
+  setCsrfToken(response.data.csrfToken);
   setFormData({ name: '', email: '', password: '', confirmPassword: '' });
   navigate('/home');
 } catch (err) {
@@ -162,6 +164,7 @@ useEffect(() => {
     );
 
     // console.log("Google login success:", res.data);
+    setCsrfToken(res.data.csrfToken);
 
     if (res.data.isNewUser) {
       navigate("/homelocation"); // redirect new users
