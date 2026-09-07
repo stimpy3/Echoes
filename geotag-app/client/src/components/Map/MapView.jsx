@@ -1,7 +1,6 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "../../context/ThemeContext";
 import { useHome } from "../../context/HomeContext";
 import { getHexFromUserId } from "../../utils/hexColorFromId";
 
@@ -111,14 +110,16 @@ const popupHtml = (memory) => `
 `;
 
 const MapView = ({
-  friendMemories,
+  friendMemories = [],
   memories,
   addingMode = false,
   onMapClick,
   pendingPosition = null,
   onPendingPositionChange,
+  // Read-only usage (e.g. someone else's profile map) — no "my home" pin, and the view
+  // fits the shown memories instead of flying to the logged-in user's home position.
+  showHomeMarker = true,
 }) => {
-  const { dark } = useTheme();
   const { homePosition } = useHome();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -178,14 +179,14 @@ const MapView = ({
 
   // Recenter when the home position resolves.
   useEffect(() => {
-    if (!mapRef.current || !mapReady || !homePosition) return;
+    if (!mapRef.current || !mapReady || !homePosition || !showHomeMarker) return;
     mapRef.current.flyTo({ center: [homePosition.lng, homePosition.lat], zoom: 12, pitch: PITCH, bearing: BEARING, essential: true });
-  }, [homePosition, mapReady]);
+  }, [homePosition, mapReady, showHomeMarker]);
 
   // Home marker.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!map || !mapReady || !showHomeMarker) return;
 
     if (homeMarkerRef.current) {
       homeMarkerRef.current.remove();
@@ -196,7 +197,29 @@ const MapView = ({
         .setLngLat([homePosition.lng, homePosition.lat])
         .addTo(map);
     }
-  }, [homePosition, mapReady]);
+  }, [homePosition, mapReady, showHomeMarker]);
+
+  // Read-only usage (no home position to anchor on) — fit the view to whatever memories
+  // are actually being shown instead of sitting on the hardcoded default center.
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || showHomeMarker || fittedRef.current) return;
+
+    const coords = memories.map((m) => m.location?.coordinates).filter(Boolean);
+    if (coords.length === 0) return;
+
+    fittedRef.current = true;
+    if (coords.length === 1) {
+      map.flyTo({ center: coords[0], zoom: 14, pitch: PITCH, bearing: BEARING, essential: true });
+    } else {
+      const bounds = coords.reduce(
+        (b, c) => b.extend(c),
+        new maplibregl.LngLatBounds(coords[0], coords[0])
+      );
+      map.fitBounds(bounds, { padding: 80, pitch: PITCH, bearing: BEARING, maxZoom: 15 });
+    }
+  }, [memories, mapReady, showHomeMarker]);
 
   // Placeholder pin for the memory currently being placed — draggable, so the user can
   // nudge the exact spot without recliking the whole map.
@@ -281,7 +304,7 @@ const MapView = ({
   }, [memories, friendMemories, mapReady]);
 
   return (
-    <div className={`relative h-full w-full ${dark ? "map-dark-filter" : ""}`}>
+    <div className="relative h-full w-full">
       <div ref={containerRef} className="w-full h-full" />
     </div>
   );

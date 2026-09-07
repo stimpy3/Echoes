@@ -31,7 +31,7 @@ export const MobileTopBar = ({ profilePic }) => {
 
 const TABS = [
   { to: '/home', label: 'Map', icon: MapIcon },
-  { to: '/explore', label: 'Explore', icon: Search },
+  { to: '/search', label: 'Search', icon: Search },
   { to: '/chat', label: 'Chat', icon: MessageCircle },
 ];
 

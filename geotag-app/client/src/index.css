@@ -215,17 +215,6 @@ input,textarea{
   }
 }
 
-/* Fakes a dark basemap by inverting the OSM tile layer, then inverting markers/popups
-   back to normal so photos and pins don't render as photo negatives. Used because CARTO's
-   free dark_all tiles now require an account. */
-.map-dark-filter .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
-}
-.map-dark-filter .leaflet-marker-pane,
-.map-dark-filter .leaflet-popup-pane {
-  filter: invert(1) hue-rotate(180deg);
-}
-
 /* MapLibre's own popup chrome (background, arrow, close button) comes from
    maplibre-gl.css and is white/light regardless of theme — override it here so the
    card follows the app's light/dark mode instead of staying stuck white. The content

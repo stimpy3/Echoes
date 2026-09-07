@@ -2,16 +2,13 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { MapContainer, TileLayer, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useTheme } from "../../context/ThemeContext";
 import CustomMarker from "./CustomMarker";
 
 
 
 const TimelineMapView = ({ memories, onPinClick }) => {
-  const { dark } = useTheme();
-
   // See MapView.jsx — CARTO's free basemap CDN now requires an account, so this uses OSM
-  // tiles with a CSS invert filter for dark mode instead.
+  // tiles directly.
   const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
   // Sort memories by date ascending
@@ -212,7 +209,7 @@ const TimelineMapView = ({ memories, onPinClick }) => {
   }, []);
 
   return (
-    <div className={`relative w-full h-full min-h-[500px] flex-1 ${dark ? "map-dark-filter" : ""}`}>
+    <div className="relative w-full h-full min-h-[500px] flex-1">
       <MapContainer
         center={[19.0866, 72.9095]}
         zoom={2}

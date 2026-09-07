@@ -100,10 +100,16 @@ export default {
           '0%': { 'background-position': '100%' },
           '100%': { 'background-position': '-100%' },
          },
+        // Drives RetroGrid on the landing hero: the grid plane scrolls toward the viewer.
+        grid: {
+          '0%': { transform: 'translateY(-50%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
       },
       animation: {
         gradient: 'gradient 8s ease infinite',
         shine: 'shine 5s linear infinite',
+        grid: 'grid 18s linear infinite',
       },
 	   boxShadow: {
         'custom-lg': '0 10px 25px rgba(0, 0, 0, 0.15)', // lighter or darker shadow

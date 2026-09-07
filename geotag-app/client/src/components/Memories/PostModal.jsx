@@ -1,6 +1,9 @@
-import { MapPin, Calendar, Heart, Pencil, Trash, Send, X } from 'lucide-react';
+import { MapPin, Calendar, Heart, Pencil, Trash, Send, X, Route } from 'lucide-react';
 import axios from 'axios';
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import TripPicker from './TripPicker';
+import { CATEGORY_SELECT_OPTIONS } from '../../lib/categories';
 
 const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
   const [memory, setMemory] = useState(null);
@@ -10,6 +13,9 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editTripId, setEditTripId] = useState("");
+  const [editDate, setEditDate] = useState("");
   
   const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:5000";
 
@@ -21,6 +27,11 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
         setLikes(res.data.likes || []);
         setEditTitle(res.data.title);
         setEditDesc(res.data.description);
+        setEditCategory(res.data.category || "");
+        setEditTripId(res.data.tripId || "");
+        // <input type="date"> wants yyyy-mm-dd. memoryDate is when it happened; fall back
+        // to createdAt for memories that predate that field.
+        setEditDate(new Date(res.data.memoryDate || res.data.createdAt).toISOString().slice(0, 10));
       } catch (err) {
         console.error("Error fetching memory:", err);
       }
@@ -70,13 +81,30 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
 
   const handleSaveEdit = async () => {
     if (!editTitle || !editDesc) return alert("Title and description required");
+    // Sent as a whole so category/trip/date survive an edit — previously only title and
+    // description were forwarded, so the rest was silently dropped on every save.
+    const payload = {
+      _id: memoryId,
+      title: editTitle,
+      description: editDesc,
+      category: editCategory,
+      tripId: editTripId,
+      memoryDate: editDate,
+    };
     try {
       if (onEdit) {
-        await onEdit({ _id: memoryId, title: editTitle, description: editDesc });
+        await onEdit(payload);
       } else {
-        await axios.patch(`${BASE_URL}/api/memory/editmemory/${memoryId}`, { title: editTitle, description: editDesc }, { withCredentials: true });
+        await axios.patch(`${BASE_URL}/api/memory/editmemory/${memoryId}`, payload, { withCredentials: true });
       }
-      setMemory({ ...memory, title: editTitle, description: editDesc });
+      setMemory({
+        ...memory,
+        title: editTitle,
+        description: editDesc,
+        category: editCategory || undefined,
+        tripId: editTripId || undefined,
+        memoryDate: editDate,
+      });
       setIsEditing(false);
     } catch (err) {
       console.error("Failed to edit:", err);
@@ -192,6 +220,27 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
                   className="w-full rounded-lg p-2 border-[1px] border-dborderColor dark:border-borderColor text-txt dark:text-dtxt bg-lightMain dark:bg-dlightMain focus:outline-none"
                   rows="3"
                 />
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full rounded-lg p-2 border-[1px] border-dborderColor dark:border-borderColor text-txt dark:text-dtxt bg-lightMain dark:bg-dlightMain focus:outline-none text-sm"
+                />
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full rounded-lg p-2 border-[1px] border-dborderColor dark:border-borderColor text-txt dark:text-dtxt bg-lightMain dark:bg-dlightMain focus:outline-none text-sm"
+                >
+                  {CATEGORY_SELECT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <TripPicker
+                  value={editTripId}
+                  onChange={setEditTripId}
+                  labelClass="block text-[11px] font-semibold uppercase tracking-[.12em] text-txt2 dark:text-dtxt2 mb-2"
+                  fieldClass="w-full rounded-lg p-2 border-[1px] border-dborderColor dark:border-borderColor text-txt dark:text-dtxt bg-lightMain dark:bg-dlightMain focus:outline-none text-sm"
+                />
                 <div className="flex gap-2">
                   <button onClick={handleSaveEdit} className="flex-1 bg-green-600 text-white rounded-md py-1">Save</button>
                   <button onClick={() => setIsEditing(false)} className="flex-1 bg-gray-500 text-white rounded-md py-1">Cancel</button>
@@ -200,8 +249,8 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
             ) : (
               <>
                 {/* Author — the API already populates userId with name + profilePic, but
-                    the modal never showed who posted it. Obvious from your own profile,
-                    not obvious at all when the same modal opens from Explore. */}
+                    the modal never showed who posted it. Obvious from your own diary, not
+                    obvious at all when the same modal opens from someone else's profile. */}
                 {memory.userId?.name && (
                   <div className="flex items-center gap-2.5 mb-4">
                     <div className="w-9 h-9 rounded-full overflow-hidden bg-black/10 dark:bg-white/10 shrink-0">
@@ -245,8 +294,24 @@ const PostModal = ({ memoryId, onClose, currentUserId, onEdit, onDelete }) => {
               )}
               <span className="flex items-center gap-1.5 shrink-0">
                 <Calendar size={16} className="shrink-0" />
-                {formatDate(memory.createdAt)}
+                {/* When it happened, not when it was uploaded — see memoryDate on the Memory model. */}
+                {formatDate(memory.memoryDate || memory.createdAt)}
               </span>
+              {memory.category && (
+                <span className="shrink-0 px-2 py-0.5 rounded-full bg-slightLightMain dark:bg-[#1c1c1c] text-[11px] font-semibold uppercase tracking-[.06em]">
+                  {memory.category}
+                </span>
+              )}
+              {memory.tripId && (
+                <Link
+                  to={`/trips/${memory.tripId}`}
+                  onClick={onClose}
+                  className="shrink-0 flex items-center gap-1.5 text-accentMain font-semibold hover:underline"
+                >
+                  <Route size={15} className="shrink-0" />
+                  View trip
+                </Link>
+              )}
             </div>
 
             {/* Comments Section */}

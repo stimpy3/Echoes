@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import MemoryCard from "../components/Memories/MemoryCard";
 import AddMemoryForm from "../components/Memories/AddMemoryForm";
 import Rail from "../components/Layout/Rail";
+import { MobileTopBar, MobileTabBar } from "../components/Layout/MobileNav";
 import BareHomePage from './BarebonesPages/BareProfilePage';
 import { useTheme } from "../context/ThemeContext";
 import animationData from "../data/animationData/emptyAnimation.json";
@@ -95,12 +96,12 @@ const MemoriesPage = () => {
   // Edit memory
   const handleEditMemory = async (updatedMemory) => {
     try {
+      const { _id, ...fields } = updatedMemory;
       const res = await axios.patch(
-        `${BASE_URL}/api/memory/editmemory/${updatedMemory._id}`,
-        {
-          title: updatedMemory.title,
-          description: updatedMemory.description,
-        },
+        `${BASE_URL}/api/memory/editmemory/${_id}`,
+        // Forward everything the modal sent — this used to pick out title/description only,
+        // which silently discarded category, trip and date on every edit.
+        fields,
         { withCredentials: true }
       );
 
@@ -213,11 +214,13 @@ const MemoriesPage = () => {
 
 if (!id || loading) {
      return (
-       <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
+       <div className="w-full min-h-screen flex flex-col md:flex-row bg-main dark:bg-dmain">
          <Rail />
-         <div className="flex-1 min-w-0">
+         <MobileTopBar />
+         <div className="flex-1 min-w-0 pb-[76px] md:pb-0">
            <BareHomePage />
          </div>
+         <MobileTabBar />
        </div>
      );
   }
@@ -225,9 +228,10 @@ if (!id || loading) {
 
 
   return (
-    <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
+    <div className="w-full min-h-screen flex flex-col md:flex-row bg-main dark:bg-dmain">
       <Rail />
-      <div className="flex-1 min-w-0 flex flex-col px-[30px] pb-[10px] overflow-y-auto">
+      <MobileTopBar />
+      <div className="flex-1 min-w-0 flex flex-col px-[30px] pb-[86px] md:pb-[10px] overflow-y-auto">
 
       {/* Profile Header */}
       <div className="mt-[30px] flex flex-col items-center">
@@ -380,6 +384,7 @@ if (!id || loading) {
         </button>
       </section>
       </div>
+      <MobileTabBar />
     </div>
   );
 };

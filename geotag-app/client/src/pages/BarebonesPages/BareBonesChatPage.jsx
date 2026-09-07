@@ -1,64 +1,32 @@
-import { ChevronLeft, Search, MessageSquareDot } from "lucide-react";
+import { Search } from "lucide-react";
 
 const BareBonesChatPage = () => {
-  
- return (
-    <section className="min-w-[300px] w-[400px] bg-lightMain dark:bg-dfadeColor h-full border-r border-borderColor dark:border-dborderColor flex flex-col">
+  return (
+    <section className="w-[320px] shrink-0 bg-main dark:bg-[#0e0e0e] h-full border-r border-hairline dark:border-dhairline flex flex-col">
+      <div className="h-[112px] p-5 flex flex-col gap-3 shrink-0">
+        <h1 className="text-[22px] font-bold text-txt dark:text-dtxt">Messages</h1>
+        <div className="relative">
+          <Search size={16} className="absolute left-[14px] top-1/2 -translate-y-1/2 text-txt2 dark:text-[#8a8a8a]" />
+          <input
+            type="text"
+            disabled
+            placeholder="Search"
+            className="w-full pl-[38px] pr-3 py-[9px] rounded-full text-sm bg-slightLightMain dark:bg-[#1c1c1c] text-txt dark:text-dtxt placeholder:text-txt2 dark:placeholder:text-[#8a8a8a] outline-none"
+          />
+        </div>
+      </div>
 
-      {/* Header Skeleton */}
-      <div className="w-full h-fit py-[10px] bg-main dark:bg-dmain flex flex-col">
-            <div className="w-full h-[35px] flex relative">
-              <div
-                className="absolute top-1/2 -translate-y-[50%] flex items-center cursor-pointer"
-                onClick={() => navigate(-1)}
-              >
-                <ChevronLeft
-                  className="text-txt2 dark:text-dtxt"
-                  size={28}
-                />
-              </div>
-
-              <div className="w-full h-full mb-[10px] flex justify-center items-center font-semibold text-[1.3rem] text-transparent bg-clip-text bg-gradient-main">
-                <h1 className="text-transparent bg-clip-text bg-gradient-mainBright">
-                  Messages
-                </h1>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="flex w-full h-[45px] rounded-[10px] items-center px-[10px]">
-              <div className="rounded-[10px] relative w-full h-4/5">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-txt2 dark:text-dtxt2"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder="Search"
-                  className="w-full h-full pl-10 rounded-[10px] bg-lightMain dark:bg-dfadeColor"
-                />
-              </div>
-            </div>
-          </div>
-
-
-      {/* Chat list skeleton rows */}
-      <div className="flex flex-col">
+      <div className="flex-1 overflow-hidden">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-4 p-3 rounded-lg bg-lightMain dark:bg-dslightLightMain animate-pulse"
-          >
-            <div className="min-w-10 h-10 rounded-full bg-gray-300 dark:bg-[#191919]" />
-
+          <div key={i} className="h-[72px] flex items-center gap-3 px-5 border-b border-hairline dark:border-[#1c1c1c] animate-pulse">
+            <div className="w-[38px] h-[38px] rounded-full bg-lightMain2 dark:bg-[#2b2b2b] shrink-0" />
             <div className="flex flex-col flex-1 gap-2">
-              <div className="h-4 bg-gray-300 dark:bg-[#191919] rounded w-[120px]" />
-              <div className="h-3 bg-gray-300 dark:bg-[#191919] rounded w-[180px]" />
+              <div className="h-3 rounded bg-lightMain2 dark:bg-[#2b2b2b] w-[110px]" />
+              <div className="h-2.5 rounded bg-lightMain2 dark:bg-[#2b2b2b] w-[160px]" />
             </div>
           </div>
         ))}
       </div>
-
     </section>
   );
 };

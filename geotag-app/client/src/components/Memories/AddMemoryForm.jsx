@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { ImagePlus, X as XIcon } from 'lucide-react';
+import TripPicker from './TripPicker';
+import { CATEGORY_SELECT_OPTIONS } from '../../lib/categories';
 
 // How long the pin has to sit still before the address auto-fills.
 const ADDRESS_AUTOFILL_DELAY = 2000;
@@ -28,6 +30,11 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
     latitude: "",
     longitude: "",
     photo: null,
+    category: "",
+    tripId: "",
+    // Defaults to today, but editable — a memory's date is when it HAPPENED, which is often
+    // not the day it gets uploaded (see memoryDate in server/models/memories.js).
+    memoryDate: new Date().toISOString().slice(0, 10),
   });
   const [addrLoading, setAddrLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -219,6 +226,9 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
       address: formData.address
     }));
     data.append('photo', formData.photo);
+    if (formData.category) data.append('category', formData.category);
+    if (formData.tripId) data.append('tripId', formData.tripId);
+    if (formData.memoryDate) data.append('memoryDate', formData.memoryDate);
 
     setSubmitError("");
     setIsSubmitting(true);
@@ -247,6 +257,9 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
           address: formData.address
         },
         photoUrl: URL.createObjectURL(formData.photo),
+        category: formData.category || undefined,
+        tripId: formData.tripId || undefined,
+        memoryDate: formData.memoryDate || undefined,
         createdAt: new Date().toISOString(),
       };
 
@@ -402,6 +415,38 @@ const AddMemoryForm = ({ onClose, onAdd, position }) => {
             className={fieldClass}
           />
         </div>
+
+        <div>
+          <label className={labelClass}>When</label>
+          <input
+            type="date"
+            name="memoryDate"
+            value={formData.memoryDate}
+            onChange={handleChange}
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Category</label>
+          <select
+            name="category"
+            value={formData.category}
+            onChange={handleChange}
+            className={fieldClass}
+          >
+            {CATEGORY_SELECT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <TripPicker
+          value={formData.tripId}
+          onChange={(tripId) => setFormData((prev) => ({ ...prev, tripId }))}
+          labelClass={labelClass}
+          fieldClass={fieldClass}
+        />
 
         <div>
           <label className={labelClass}>Coordinates</label>

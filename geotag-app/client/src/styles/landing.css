@@ -1,0 +1,98 @@
+/*
+Landing-page-only styles.
+
+Everything here is scoped under `.echoes-landing` on purpose. The landing route is
+the one dark-only surface in the app — it does not participate in the light/dark
+ThemeContext — so its colours are hard-coded rather than tokenised, and nothing in
+this file may leak into the logged-in screens.
+*/
+
+/* index.css kills focus rings globally with `*:focus { outline:none; box-shadow:none }`.
+   `.echoes-landing a:focus-visible` scores higher than `*:focus`, so the ring wins here
+   without touching the global rule that the rest of the app relies on. */
+.echoes-landing a:focus-visible,
+.echoes-landing button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(45, 170, 221, 0.35);
+}
+
+/* The scrolling element is <html>, not the landing div, so `scroll-smooth` on the component
+   would do nothing — the nav's in-page anchors need the behaviour set on the scroller itself,
+   and :has keeps it off every other route. */
+html:has(.echoes-landing) {
+  scroll-behavior: smooth;
+}
+
+/* Anchor targets sit under the 80px sticky nav. */
+.echoes-landing [id^='f-'] {
+  scroll-margin-top: 80px;
+}
+
+@keyframes echoes-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes echoes-pop {
+  from {
+    opacity: 0;
+    transform: translateY(50px) scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.echoes-rise {
+  animation: echoes-rise 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* `pop` and the polaroid rotation must never share an element: an animated transform
+   with fill-mode `both` overwrites the inline rotate and the card lands square. The
+   rotation lives on the wrapper, this class on the child. */
+.echoes-pop {
+  animation: echoes-pop 0.8s cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+
+/* Warp background beams. Travel is expressed in cqmax so it scales with the container the
+   WarpBackground establishes, rather than a hard-coded pixel distance. */
+@keyframes echoes-warp-beam {
+  from {
+    transform: translateX(-50%) translateY(100cqmax);
+  }
+  to {
+    transform: translateX(-50%) translateY(-100%);
+  }
+}
+
+.echoes-warp-beam {
+  animation-name: echoes-warp-beam;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .echoes-rise,
+  .echoes-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Backgrounds that loop forever stop entirely rather than freezing mid-travel. */
+  .echoes-warp-beam,
+  .animate-grid {
+    animation: none;
+  }
+
+  .echoes-warp-beam {
+    opacity: 0;
+  }
+}

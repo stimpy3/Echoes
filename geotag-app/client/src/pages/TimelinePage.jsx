@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import Rail from '../components/Layout/Rail';
+import { MobileTopBar, MobileTabBar } from '../components/Layout/MobileNav';
 import { SegmentedPills } from '../components/Layout/ContentHeader';
 import GlareHover from '../components/Layout/GlareHover';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -66,16 +67,20 @@ const TimelinePage = () => {
     if (carousel) carousel.scrollBy({ left: direction * 200, behavior: 'smooth' });
   };
 
-  const memoryYears = Array.from(new Set(memories.map(m => new Date(m.createdAt).getFullYear()))).sort((a, b) => a - b);
+  // memoryDate is when it happened; createdAt is merely when it was uploaded. Legacy
+  // memories have no memoryDate, so createdAt stands in for them.
+  const whenOf = (m) => new Date(m.memoryDate || m.createdAt);
+
+  const memoryYears = Array.from(new Set(memories.map(m => whenOf(m).getFullYear()))).sort((a, b) => a - b);
   const minYear = memoryYears.length > 0 ? Math.min(...memoryYears) : new Date().getFullYear();
   const hasPreviousYear = selectedYear > minYear;
   const isCurrentYearRealTime = selectedYear === new Date().getFullYear();
 
   const memoriesByMonth = Array.from({ length: 12 }, () => []);
   memories.forEach(memory => {
-    const memoryDate = new Date(memory.createdAt);
-    if (memoryDate.getFullYear() === selectedYear) {
-      memoriesByMonth[memoryDate.getMonth()].push(memory);
+    const when = whenOf(memory);
+    if (when.getFullYear() === selectedYear) {
+      memoriesByMonth[when.getMonth()].push(memory);
     }
   });
   const yearTotal = memoriesByMonth.reduce((sum, arr) => sum + arr.length, 0);
@@ -105,11 +110,12 @@ const TimelinePage = () => {
   }, []);
 
   return (
-    <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
+    <div className="w-full min-h-screen flex flex-col md:flex-row bg-main dark:bg-dmain">
       <Rail />
-      <div className="flex-1 min-w-0 flex flex-col">
+      <MobileTopBar />
+      <div className="flex-1 min-w-0 flex flex-col pb-[76px] md:pb-0">
         <header className="h-[72px] flex items-center gap-5 px-8 border-b border-hairline dark:border-dhairline">
-          <h1 className="text-[22px] font-bold tracking-[-0.01em] text-txt dark:text-dtxt">Timeline</h1>
+          <h1 className="text-[22px] font-bold tracking-[-0.01em] text-txt dark:text-dtxt">Diary</h1>
 
           <div className="flex items-center gap-2">
             <button
@@ -132,7 +138,12 @@ const TimelinePage = () => {
 
           <span className="text-[12.5px] text-txt2 dark:text-dtxt2">{yearTotal} memories</span>
 
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            <SegmentedPills
+              options={[{ value: 'timeline', label: 'Timeline' }, { value: 'trips', label: 'Trips' }]}
+              value="timeline"
+              onChange={(v) => v === 'trips' && navigate('/trips')}
+            />
             <SegmentedPills
               options={[{ value: 'list', label: 'List' }, { value: 'map', label: 'Map' }]}
               value={viewMode}
@@ -325,6 +336,7 @@ const TimelinePage = () => {
           />
         )}
       </div>
+      <MobileTabBar />
     </div>
   );
 };

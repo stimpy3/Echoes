@@ -1,10 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Lock, User } from "lucide-react";
+import { ChevronLeft, LayoutGrid, Map as MapIcon, Lock, User } from "lucide-react";
 import axios from "axios";
-import TimelineMapView from "../components/Map/TimelineMapView";
+import MapView from "../components/Map/MapView";
 import Rail from "../components/Layout/Rail";
-import { FilterRow } from "../components/Layout/ContentHeader";
 import MemoryCard from "../components/Memories/MemoryCard";
 import PostModal from "../components/Memories/PostModal";
 import BareHomePage from './BarebonesPages/BareProfilePage';
@@ -143,76 +142,102 @@ const ProfilePage = () => {
   return (
     <div className="w-full min-h-screen flex bg-main dark:bg-dmain">
       <Rail />
-      <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-[72px] flex items-center gap-4 px-8 border-b border-hairline dark:border-dhairline">
-          <button onClick={() => navigate(-1)} aria-label="Back" className="text-txt dark:text-dtxt">
-            <ChevronLeft size={24} />
-          </button>
-          <h1 className="text-[22px] font-bold tracking-[-0.01em] text-txt dark:text-dtxt truncate">{user.name}</h1>
-          <span className="ml-auto px-[9px] py-[3px] rounded-full bg-slightLightMain dark:bg-[#1c1c1c] text-[11px] font-semibold uppercase tracking-[.06em] text-[#5a5a5a]">
-            {user.isPrivate ? 'Private' : 'Public'}
-          </span>
-        </header>
+      <div className="flex-1 min-w-0 flex flex-col px-[30px] pb-[10px] overflow-y-auto">
 
-        {/* Identity block */}
-        <div className="p-8 border-b border-hairline dark:border-dhairline flex items-start gap-8">
-          {user.profilePic ? (
-            <img src={user.profilePic} alt="" className="w-[112px] h-[112px] rounded-full object-cover shrink-0" />
-          ) : (
-            <div className="w-[112px] h-[112px] rounded-full bg-lightMain dark:bg-dlightMain flex items-center justify-center shrink-0">
-              <User size={48} className="text-gray-400" />
-            </div>
-          )}
-
-          <div className="flex flex-col min-w-0">
-            <h2 className="text-[17px] font-semibold text-txt dark:text-dtxt truncate">{user.name}</h2>
-            <p className="text-[12.5px] text-txt2 dark:text-dtxt2 truncate">{user.email}</p>
-            <div className="flex gap-10 mt-4">
-              {[
-                { value: memories.length, label: 'echoes' },
-                { value: followersCount, label: 'followers' },
-                { value: followingCount, label: 'following' },
-              ].map((stat) => (
-                <div key={stat.label} className="flex flex-col gap-1">
-                  <span className="font-black leading-none text-txt dark:text-dtxt" style={{ fontFamily: '"Archivo Black", sans-serif', fontSize: 26 }}>
-                    {stat.value}
-                  </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-txt2 dark:text-dtxt2">{stat.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {!isOwnProfile && (
-            <div className="ml-auto flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleFollow}
-                className={`h-[38px] px-[22px] rounded-full text-[13px] font-semibold ${
-                  followState === "none"
-                    ? "bg-gradient-mainBright text-white"
-                    : "border border-lightMain2 dark:border-dlightMain2 text-txt dark:text-dtxt"
-                }`}
-              >
-                {followState === "following" ? "Following" : followState === "requested" ? "Requested" : "Follow"}
-              </button>
-              <button
-                onClick={handleOpenChat}
-                className="h-[38px] px-[22px] rounded-full border border-lightMain2 dark:border-dlightMain2 text-[13px] font-medium text-txt dark:text-dtxt"
-              >
-                Message
-              </button>
-            </div>
-          )}
+        <div
+          className="w-full flex items-center gap-3 mt-[20px] cursor-pointer"
+          onClick={() => navigate(-1)}
+        >
+          <ChevronLeft className="text-txt dark:text-dtxt" size={28} />
+          <span className="text-txt dark:text-dtxt text-lg">Back</span>
         </div>
 
-        <FilterRow
-          options={[{ value: 'posts', label: 'Posts' }, { value: 'map', label: 'Map' }]}
-          value={activeTab}
-          onChange={setActiveTab}
-        />
+        {/* Profile Header */}
+        <div className="mt-[10px] flex flex-col items-center">
+          <div className="w-full pb-[30px]">
+            <div className="h-[200px] flex items-center border-b border-borderColor dark:border-dborderColor">
+
+              <div className="min-w-36 flex items-center justify-between">
+                {user.profilePic ? (
+                  <img
+                    src={user.profilePic}
+                    className="w-36 h-36 rounded-full border-4 border-main dark:border-dmain object-cover"
+                  />
+                ) : (
+                  <div className="w-36 h-36 rounded-full bg-gray-300 flex items-end justify-center overflow-hidden">
+                    <User size={112} className="text-gray-500" />
+                  </div>
+                )}
+              </div>
+
+              <div className="px-[30px] w-full">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {user.name}
+                </h2>
+                <p className="text-sm text-txt2 dark:text-dtxt2">{user.email}</p>
+
+                {!isOwnProfile && (
+                  <section className="w-fit flex gap-4 mt-[10px]">
+                    <button
+                      onClick={handleFollow}
+                      className={
+                        `py-1 px-2 rounded-[5px] ` +
+                        (followState === "requested"
+                          ? "bg-lgradient-main dark:bg-dgradient-main text-txt dark:text-dtxt"
+                          : followState === "following"
+                          ? "bg-lightMain dark:bg-dlightMain"
+                          : "bg-gradient-main text-dtxt")
+                      }
+                    >
+                      {followState === "following" ? "Following" : followState === "requested" ? "Requested" : "Follow"}
+                    </button>
+                    <button onClick={handleOpenChat} className="bg-lightMain dark:bg-dlightMain py-1 px-2 rounded-[5px]">
+                      Message
+                    </button>
+                  </section>
+                )}
+
+                <div className="flex justify-around mt-[20px] text-[1.3rem]">
+                  <p>{memories.length} <span className="text-txt2 dark:text-dtxt2">echoes</span></p>
+                  <p className="cursor-pointer" onClick={() => navigate(`/followers`)}>
+                    {followersCount} <span className="text-txt2 dark:text-dtxt2">followers</span>
+                  </p>
+                  <p className="cursor-pointer" onClick={() => navigate(`/following`)}>
+                    {followingCount} <span className="text-txt2 dark:text-dtxt2">following</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="w-full mt-[10px] flex justify-center">
+          <div className="flex gap-[40px] p-2">
+            <button
+              onClick={() => setActiveTab("posts")}
+              className={`flex flex-col items-center pb-2 transition ${
+                activeTab === "posts" ? "text-txt dark:text-dtxt border-b-2 border-txt dark:border-dtxt" : "text-txt2 dark:text-dtxt2"
+              }`}
+            >
+              <LayoutGrid size={22} />
+              <span className="text-sm">Posts</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("map")}
+              className={`flex flex-col items-center pb-2 transition ${
+                activeTab === "map" ? "text-txt dark:text-dtxt border-b-2 border-txt dark:border-dtxt" : "text-txt2 dark:text-dtxt2"
+              }`}
+            >
+              <MapIcon size={22} />
+              <span className="text-sm">Map</span>
+            </button>
+          </div>
+        </div>
 
         {!canViewPrivateContent ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
+          <div className="w-full min-h-[60vh] flex flex-col items-center justify-center text-center px-6">
             <div className="w-14 h-14 rounded-full bg-lightMain dark:bg-dlightMain flex items-center justify-center mb-4">
               <Lock size={26} className="text-txt dark:text-dtxt" />
             </div>
@@ -223,20 +248,20 @@ const ProfilePage = () => {
           </div>
         ) : activeTab === "posts" ? (
           memories.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <div className="flex flex-col items-center text-center min-h-[60vh]">
               <Lottie animationData={animationData} loop={true} className="h-[250px]" />
-              <p className="text-txt dark:text-dtxt text-lg mb-4">No memories yet</p>
+              <p className="text-txt dark:text-dtxt text-lg">No memories yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[5px] mt-4">
               {memories.map((memory) => (
                 <MemoryCard key={memory._id} memory={memory} currentUserId={currentUserId} />
               ))}
             </div>
           )
         ) : (
-          <div className="flex-1 relative">
-            <TimelineMapView memories={memories} onPinClick={(id) => setSelectedMemoryId(id)} />
+          <div className="w-full h-[75vh] mt-4 rounded-xl overflow-hidden relative border border-hairline dark:border-dhairline">
+            <MapView memories={memories} showHomeMarker={false} />
           </div>
         )}
       </div>

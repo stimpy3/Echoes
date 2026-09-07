@@ -1,0 +1,25 @@
+/*
+Auth-screen-only styles.
+
+Google Identity Services renders its own button and gives us no way to restyle its insides —
+`filled_black` puts the G on a white disc, `outline` is a white slab, and neither matches the
+dark inputs it sits between. So the visible button is ours, and the real GIS button is laid
+over it at zero opacity to catch the click.
+
+That only works if the GIS button covers the whole slot. It sizes itself (its `width` option
+caps at 400px and it emits wrappers with inline widths), so these rules stretch whatever it
+emits to fill the slot in both axes. Without them the corners would be dead to the pointer.
+*/
+.echoes-google-slot #googleBtn {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.echoes-google-slot #googleBtn > div,
+.echoes-google-slot #googleBtn > div > div,
+.echoes-google-slot #googleBtn iframe {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+}
